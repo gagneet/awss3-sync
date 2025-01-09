@@ -47,7 +47,7 @@
             this.btnUploadFile.Location = new System.Drawing.Point(475, 12);
             this.btnUploadFile.Margin = new System.Windows.Forms.Padding(4);
             this.btnUploadFile.Name = "btnUploadFile";
-            this.btnUploadFile.Size = new System.Drawing.Size(125, 30);
+            this.btnUploadFile.Size = new System.Drawing.Size(130, 30);
             this.btnUploadFile.TabIndex = 0;
             this.btnUploadFile.Text = "&Browse && Upload";
             this.btnUploadFile.UseVisualStyleBackColor = true;

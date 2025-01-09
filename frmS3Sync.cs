@@ -421,10 +421,21 @@ namespace AWSS3Sync
             }
         }
 
+        /*
+         * Method to list all the files and folders which are present on a specified S3 bucket
+         * Added additional logic, to exclude certain folders from being shown in the list, like logs/
+         */
         private async void btnListS3Files_Click(object sender, EventArgs e)
         {
             try
             {
+                // List of folders or files to exclude
+                var excludeList = new List<string>
+                {
+                    "logs/",
+                    "specificfile.logs"
+                };
+
                 var listObjectsV2Request = new ListObjectsV2Request
                 {
                     BucketName = _myBucketName
@@ -437,7 +448,13 @@ namespace AWSS3Sync
                     lstS3FilesBox.Items.Clear();
                     foreach (var s3Object in response.S3Objects)
                     {
-                        lstS3FilesBox.Items.Add(s3Object.Key);
+                        // Check if the object key starts with any of the excluded folders
+                        bool isExcluded = excludeList.Any(excludedPath => s3Object.Key.StartsWith(excludedPath, StringComparison.OrdinalIgnoreCase));
+
+                        if (!isExcluded)
+                        {
+                            lstS3FilesBox.Items.Add(s3Object.Key);
+                        }
                     }
                 }
                 else
