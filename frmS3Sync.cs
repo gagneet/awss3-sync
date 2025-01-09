@@ -71,7 +71,7 @@ namespace AWSS3Sync
         }
 
         /*
-         * Function to get the relative path, so that the same heirarchy can be created on S3
+         * Custom method to get the relative path, so that the same heirarchy can be created on S3
          */
         public static string GetRelativePath(string relativeTo, string path)
         {
@@ -101,43 +101,62 @@ namespace AWSS3Sync
         {
             try
             {
+                // Specify the number of days
+                int days = 60; // Example: files changed in the last 60 days
+
                 // Get the list of objects in the S3 bucket
                 var existingS3Objects = await ListS3ObjectsAsync(_myBucketName);
 
                 foreach (string filePath in filesToUpload)
                 {
                     string fileName = Path.GetFileName(filePath);
+                    // Use the below for more precise calculation on newer .NET frameworks/core
+                    // string relativePath = GetRelativePath(selectedFolderPath, filePath).Replace("\\", "/", StringComparison.Ordinal); // Replace backslashes with forward slashes for S3 compatibility
                     string relativePath = GetRelativePath(selectedFolderPath, filePath).Replace("\\", "/"); // Replace backslashes with forward slashes for S3 compatibility
+                    DateTime localFileLastModified = File.GetLastWriteTimeUtc(filePath);
+
+                    bool shouldUpload = false;
 
                     // Check if the file exists in S3 and compare last modified dates
                     if (existingS3Objects.TryGetValue(relativePath, out var s3ObjectMetadata))
                     {
-                        var localFileLastModified = File.GetLastWriteTimeUtc(filePath);
-
-                        if (localFileLastModified <= s3ObjectMetadata.LastModified)
+                        if (localFileLastModified > s3ObjectMetadata.LastModified)
                         {
-                            // The local file is not newer, skip uploading
-                            continue;
+                            shouldUpload = true;
                         }
                     }
-
-                    // The file is new or has been updated, upload it
-                    using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                    else
                     {
-                        var putObjectRequest = new PutObjectRequest
-                        {
-                            BucketName = _myBucketName,
-                            Key = relativePath,
-                            InputStream = fileStream,
-                            AutoCloseStream = true
-                        };
+                        // File does not exist in S3, mark for upload
+                        shouldUpload = true;
+                    }
 
-                        await _s3Client.PutObjectAsync(putObjectRequest);
-                        Console.WriteLine($"Uploaded: {relativePath}");
+                    // Check if the file was modified in the last X days
+                    if (localFileLastModified > DateTime.UtcNow.AddDays(-days))
+                    {
+                        shouldUpload = true;
+                    }
+
+                    // Upload the file if it is new or has been updated
+                    if (shouldUpload)
+                    {
+                        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                        {
+                            var putObjectRequest = new PutObjectRequest
+                            {
+                                BucketName = _myBucketName,
+                                Key = relativePath,
+                                InputStream = fileStream,
+                                AutoCloseStream = true
+                            };
+
+                            await _s3Client.PutObjectAsync(putObjectRequest);
+                            Console.WriteLine($"Uploaded: {relativePath}");
+                        }
                     }
                 }
 
-                MessageBox.Show("Folder synchronization completed successfully!");
+                MessageBox.Show("Folder synchronization completed successfully!", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (AmazonS3Exception s3Ex)
             {
