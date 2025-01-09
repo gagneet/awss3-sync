@@ -107,6 +107,12 @@ namespace AWSS3Sync
                 // Get the list of objects in the S3 bucket
                 var existingS3Objects = await ListS3ObjectsAsync(_myBucketName);
 
+                if (filesToUpload.Count == 0)
+                {
+                    MessageBox.Show("No files to upload from the local folder.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 foreach (string filePath in filesToUpload)
                 {
                     string fileName = Path.GetFileName(filePath);
@@ -246,6 +252,83 @@ namespace AWSS3Sync
             }
         }
 
+        /*
+         * Same method as above, but has a fail-safe to ensure that the file exists, before using the Key/ID
+         * 
+        private async void btnUploadFile_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                string filePath = openFileDialog.FileName;
+                string fileName = Path.GetFileName(filePath);
+
+                lblSourceFileName.Text = openFileDialog.FileName;
+
+                if (MessageBox.Show("Do you want to upload this file?", this.Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    string fileExtension = filePath.Substring(filePath.LastIndexOf(".") + 1);
+                    string contentType = Code.Misc.GetContentType(fileExtension);
+
+                    try
+                    {
+                        // Check if the object already exists
+                        try
+                        {
+                            var metadataRequest = new GetObjectMetadataRequest
+                            {
+                                BucketName = _myBucketName,
+                                Key = fileName
+                            };
+
+                            var metadataResponse = await _s3Client.GetObjectMetadataAsync(metadataRequest);
+
+                            // If we get here, the object exists
+                            MessageBox.Show($"File '{fileName}' already exists in the S3 bucket. Upload cancelled.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        {
+                            // Object does not exist, we can proceed with the upload
+                        }
+
+                        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                        {
+                            var putObjectRequest = new PutObjectRequest
+                            {
+                                BucketName = _myBucketName,
+                                Key = fileName,
+                                InputStream = fileStream,
+                                ContentType = contentType,
+                                CannedACL = S3CannedACL.Private,
+                                AutoCloseStream = true
+                            };
+
+                            PutObjectResponse response = await _s3Client.PutObjectAsync(putObjectRequest);
+
+                            if (response.ETag != null)
+                            {
+                                string etag = response.ETag;
+                                string versionID = response.VersionId;
+
+                                MessageBox.Show("File uploaded to S3 Bucket Successfully.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            }
+                        }
+                    }
+                    catch (AmazonS3Exception s3Ex)
+                    {
+                        MessageBox.Show($"Error uploading file to S3: {s3Ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"An unexpected error occurred: {ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+        */
+
+
         private async void btnUploadFolder_Click(object sender, EventArgs e)
         {
             if (MessageBox.Show("Do you want to upload the listed files to S3?", this.Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
@@ -361,28 +444,39 @@ namespace AWSS3Sync
                 return;
             }
 
-            var s3Objects = await GetObjectsFromS3Async(bucketName);
+            var s3ObjectsMetadata = await GetObjectsMetadataFromS3Async(bucketName);
 
             foreach (var filePath in Directory.GetFiles(localFolderPath))
             {
                 string fileName = Path.GetFileName(filePath);
                 string s3Key = fileName;
 
-                if (!s3Objects.Contains(s3Key))
+                if (!s3ObjectsMetadata.ContainsKey(s3Key))
                 {
                     await UploadFileToS3Async(filePath, bucketName, s3Key);
                     Console.WriteLine($"Uploaded: {fileName}");
                 }
                 else
                 {
-                    Console.WriteLine($"File already exists in S3: {fileName}");
+                    DateTime localFileLastModified = File.GetLastWriteTimeUtc(filePath);
+                    DateTime s3ObjectLastModified = s3ObjectsMetadata[s3Key];
+
+                    if (localFileLastModified > s3ObjectLastModified)
+                    {
+                        await UploadFileToS3Async(filePath, bucketName, s3Key);
+                        Console.WriteLine($"Uploaded: {fileName}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"File in S3 is up to date: {fileName}");
+                    }
                 }
             }
         }
 
-        private async Task<HashSet<string>> GetObjectsFromS3Async(string bucketName)
+        private async Task<Dictionary<string, DateTime>> GetObjectsMetadataFromS3Async(string bucketName)
         {
-            var s3Objects = new HashSet<string>();
+            var s3ObjectsMetadata = new Dictionary<string, DateTime>();
 
             var request = new ListObjectsRequest
             {
@@ -396,13 +490,20 @@ namespace AWSS3Sync
 
                 foreach (var s3Object in response.S3Objects)
                 {
-                    s3Objects.Add(s3Object.Key);
+                    var metadataRequest = new GetObjectMetadataRequest
+                    {
+                        BucketName = bucketName,
+                        Key = s3Object.Key
+                    };
+
+                    var metadataResponse = await _s3Client.GetObjectMetadataAsync(metadataRequest);
+                    s3ObjectsMetadata[s3Object.Key] = metadataResponse.LastModified.ToUniversalTime();
                 }
 
                 request.Marker = response.NextMarker; // Use NextMarker for pagination
             } while (response.IsTruncated);
 
-            return s3Objects;
+            return s3ObjectsMetadata;
         }
 
         private async Task UploadFileToS3Async(string filePath, string bucketName, string s3Key)
@@ -420,6 +521,7 @@ namespace AWSS3Sync
                 await _s3Client.PutObjectAsync(putObjectRequest);
             }
         }
+
 
         /*
          * Method to list all the files and folders which are present on a specified S3 bucket

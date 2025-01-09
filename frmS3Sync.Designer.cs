@@ -87,7 +87,7 @@
             this.btnSyncFolder.Text = "&Sync && Upload";
             this.btnSyncFolder.Enabled = false;
             this.btnSyncFolder.UseVisualStyleBackColor = true;
-            this.btnSyncFolder.Click += new System.EventHandler(this.btnSyncFiles_Click);
+            this.btnSyncFolder.Click += new System.EventHandler(this.btnSyncFolder_Click);
             // 
             // btnListS3Files
             // 
