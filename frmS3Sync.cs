@@ -46,7 +46,8 @@ namespace AWSS3Sync
         private void btnSelectFolder_Click(object sender, EventArgs e)
         {
             // Disable the Upload/Sync button
-            btnSyncFolder.Enabled = true;
+            btnSyncFolder.Enabled = false;
+            btnUploadFolder.Enabled = false;
 
             using (var folderBrowserDialog = new FolderBrowserDialog())
             {

@@ -62,6 +62,7 @@
             this.btnUploadFolder.Size = new System.Drawing.Size(125, 30);
             this.btnUploadFolder.TabIndex = 1;
             this.btnUploadFolder.Text = "Folder &Upload";
+            this.btnUploadFolder.Enabled = false;
             this.btnUploadFolder.UseVisualStyleBackColor = true;
             this.btnUploadFolder.Click += new System.EventHandler(this.btnUploadFolder_Click);
             // 
@@ -84,6 +85,7 @@
             this.btnSyncFolder.Size = new System.Drawing.Size(125, 30);
             this.btnSyncFolder.TabIndex = 3;
             this.btnSyncFolder.Text = "&Sync && Upload";
+            this.btnSyncFolder.Enabled = false;
             this.btnSyncFolder.UseVisualStyleBackColor = true;
             this.btnSyncFolder.Click += new System.EventHandler(this.btnSyncFiles_Click);
             // 
