@@ -44,43 +44,43 @@
             // 
             // btnUploadFile
             // 
-            this.btnUploadFile.Location = new System.Drawing.Point(478, 12);
+            this.btnUploadFile.Location = new System.Drawing.Point(475, 12);
             this.btnUploadFile.Margin = new System.Windows.Forms.Padding(4);
             this.btnUploadFile.Name = "btnUploadFile";
-            this.btnUploadFile.Size = new System.Drawing.Size(133, 30);
+            this.btnUploadFile.Size = new System.Drawing.Size(125, 30);
             this.btnUploadFile.TabIndex = 0;
             this.btnUploadFile.Text = "&Browse && Upload";
             this.btnUploadFile.UseVisualStyleBackColor = true;
             this.btnUploadFile.Click += new System.EventHandler(this.btnUploadFile_Click);
             // 
-            // btnUploadFolder
-            // 
-            this.btnUploadFolder.Location = new System.Drawing.Point(616, 12);
-            this.btnUploadFolder.Margin = new System.Windows.Forms.Padding(4);
-            this.btnUploadFolder.Name = "btnUploadFolder";
-            this.btnUploadFolder.Size = new System.Drawing.Size(132, 30);
-            this.btnUploadFolder.TabIndex = 1;
-            this.btnUploadFolder.Text = "Folder && &Upload";
-            this.btnUploadFolder.UseVisualStyleBackColor = true;
-            this.btnUploadFolder.Click += new System.EventHandler(this.btnUploadFolder_Click);
-            // 
             // btnBrowseFolder
             // 
-            this.btnBrowseFolder.Location = new System.Drawing.Point(772, 12);
+            this.btnBrowseFolder.Location = new System.Drawing.Point(640, 12);
             this.btnBrowseFolder.Margin = new System.Windows.Forms.Padding(4);
             this.btnBrowseFolder.Name = "btnBrowseFolder";
-            this.btnBrowseFolder.Size = new System.Drawing.Size(131, 30);
+            this.btnBrowseFolder.Size = new System.Drawing.Size(125, 30);
             this.btnBrowseFolder.TabIndex = 2;
             this.btnBrowseFolder.Text = "Browse &Folder";
             this.btnBrowseFolder.UseVisualStyleBackColor = true;
             this.btnBrowseFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
             // 
+            // btnUploadFolder
+            // 
+            this.btnUploadFolder.Location = new System.Drawing.Point(770, 12);
+            this.btnUploadFolder.Margin = new System.Windows.Forms.Padding(4);
+            this.btnUploadFolder.Name = "btnUploadFolder";
+            this.btnUploadFolder.Size = new System.Drawing.Size(125, 30);
+            this.btnUploadFolder.TabIndex = 1;
+            this.btnUploadFolder.Text = "Folder &Upload";
+            this.btnUploadFolder.UseVisualStyleBackColor = true;
+            this.btnUploadFolder.Click += new System.EventHandler(this.btnUploadFolder_Click);
+            // 
             // btnSyncFolder
             // 
-            this.btnSyncFolder.Location = new System.Drawing.Point(903, 12);
+            this.btnSyncFolder.Location = new System.Drawing.Point(900, 12);
             this.btnSyncFolder.Margin = new System.Windows.Forms.Padding(4);
             this.btnSyncFolder.Name = "btnSyncFolder";
-            this.btnSyncFolder.Size = new System.Drawing.Size(121, 30);
+            this.btnSyncFolder.Size = new System.Drawing.Size(125, 30);
             this.btnSyncFolder.TabIndex = 3;
             this.btnSyncFolder.Text = "&Sync && Upload";
             this.btnSyncFolder.UseVisualStyleBackColor = true;
@@ -91,7 +91,7 @@
             this.btnListS3Files.Location = new System.Drawing.Point(1265, 730);
             this.btnListS3Files.Margin = new System.Windows.Forms.Padding(4);
             this.btnListS3Files.Name = "btnListS3Files";
-            this.btnListS3Files.Size = new System.Drawing.Size(100, 28);
+            this.btnListS3Files.Size = new System.Drawing.Size(125, 30);
             this.btnListS3Files.TabIndex = 4;
             this.btnListS3Files.Text = "&List Files";
             this.btnListS3Files.UseVisualStyleBackColor = true;
@@ -100,10 +100,10 @@
             // btnDownloadFiles
             // 
             this.btnDownloadFiles.Enabled = false;
-            this.btnDownloadFiles.Location = new System.Drawing.Point(1464, 730);
+            this.btnDownloadFiles.Location = new System.Drawing.Point(1465, 730);
             this.btnDownloadFiles.Margin = new System.Windows.Forms.Padding(4);
             this.btnDownloadFiles.Name = "btnDownloadFiles";
-            this.btnDownloadFiles.Size = new System.Drawing.Size(100, 28);
+            this.btnDownloadFiles.Size = new System.Drawing.Size(125, 30);
             this.btnDownloadFiles.TabIndex = 5;
             this.btnDownloadFiles.Text = "&Download";
             this.btnDownloadFiles.UseVisualStyleBackColor = true;
@@ -137,7 +137,7 @@
             this.lstLocalFilesBox.Location = new System.Drawing.Point(250, 48);
             this.lstLocalFilesBox.Margin = new System.Windows.Forms.Padding(4);
             this.lstLocalFilesBox.Name = "lstLocalFilesBox";
-            this.lstLocalFilesBox.Size = new System.Drawing.Size(774, 660);
+            this.lstLocalFilesBox.Size = new System.Drawing.Size(774, 724);
             this.lstLocalFilesBox.TabIndex = 8;
             // 
             // picPreview
@@ -168,7 +168,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1850, 850);
+            this.ClientSize = new System.Drawing.Size(1800, 850);
             this.Controls.Add(this.btnBrowseFolder);
             this.Controls.Add(this.lstLocalFilesBox);
             this.Controls.Add(this.btnSyncFolder);

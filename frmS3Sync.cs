@@ -3,7 +3,6 @@ using Amazon.S3.Model;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -41,6 +40,9 @@ namespace AWSS3Sync
         private string selectedFolderPath;
         private List<string> filesToUpload = new List<string>();
 
+        /*
+         * Function to select the folder which you will upload from the local system to S3
+         */
         private void btnSelectFolder_Click(object sender, EventArgs e)
         {
             // Disable the Upload/Sync button
@@ -61,12 +63,16 @@ namespace AWSS3Sync
                         lstLocalFilesBox.Items.Add(filePath);
                     }
 
-                    // Enable the Upload button
+                    // Enable the Upload & Sync buttons
                     btnSyncFolder.Enabled = true;
+                    btnUploadFolder.Enabled = true;
                 }
             }
         }
 
+        /*
+         * Function to get the relative path, so that the same heirarchy can be created on S3
+         */
         public static string GetRelativePath(string relativeTo, string path)
         {
             var fromUri = new Uri(relativeTo);
@@ -88,6 +94,9 @@ namespace AWSS3Sync
             return relativePath;
         }
 
+        /*
+         * Function to check the timestamp of the files on AWS S3 and then sync only new files
+         */
         private async void btnSyncFiles_Click(object sender, EventArgs e)
         {
             try
@@ -166,7 +175,6 @@ namespace AWSS3Sync
             return s3Objects;
         }
 
-
         private async void btnUploadFile_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
@@ -221,6 +229,47 @@ namespace AWSS3Sync
 
         private async void btnUploadFolder_Click(object sender, EventArgs e)
         {
+            if (MessageBox.Show("Do you want to upload the listed files to S3?", this.Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                try
+                {
+                    foreach (string filePath in filesToUpload)
+                    {
+                        string relativePath = GetRelativePath(selectedFolderPath, filePath).Replace("\\", "/"); // Replace backslashes with forward slashes for S3 compatibility
+
+                        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                        {
+                            var putObjectRequest = new PutObjectRequest
+                            {
+                                BucketName = _myBucketName,
+                                Key = relativePath,
+                                InputStream = fileStream,
+                                AutoCloseStream = true
+                            };
+
+                            await _s3Client.PutObjectAsync(putObjectRequest);
+                            Console.WriteLine($"Uploaded: {relativePath}");
+                        }
+                    }
+
+                    MessageBox.Show("Folder uploaded successfully!", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (AmazonS3Exception s3Ex)
+                {
+                    MessageBox.Show($"Error uploading file to S3: {s3Ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"An unexpected error occurred: {ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        /*
+        * Previous implementation of the Folder Upload
+        * 
+        private async void btnUploadFolder_Click(object sender, EventArgs e)
+        {
             using (var folderBrowserDialog = new FolderBrowserDialog())
             {
                 if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
@@ -260,6 +309,7 @@ namespace AWSS3Sync
                 }
             }
         }
+        */
 
         private async void btnSyncFolder_Click(object sender, EventArgs e)
         {
@@ -383,87 +433,53 @@ namespace AWSS3Sync
             }
         }
 
-        /*
-         * Alternate List Files, with the older AWS control
-         * 
-        private void btnListS3Files_Click(object sender, EventArgs e)
-        {
-            lstS3FilesBox.Items.Clear();
-            try
-            {
-
-                ListObjectsV2Request request = new ListObjectsV2Request();
-                request.BucketName = _myBucketName;
-                do
-                {
-                    ListObjectsV2Response response = _s3Client.ListObjects(request);
-
-                    // Process response.
-                    // ...
-                    response.S3Objects.ForEach(x => { lstS3FilesBox.Items.Add(x.Key); });
-                    // If response is truncated, set the marker to get the next 
-                    // set of keys.
-                    if (response.IsTruncated)
-                    {
-                        request.Marker = response.NextMarker;
-                    }
-                    else
-                    {
-                        request = null;
-                    }
-                } while (request != null);
-            }
-            catch (Exception ex)
-            {
-
-                MessageBox.Show(ex.Message, this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-        */
-
         private void btnDownloadFiles_Click(object sender, EventArgs e)
         {
             if (lstS3FilesBox.SelectedIndex != -1)
             {
-                using (var savedi = new SaveFileDialog())
+                using (var saveFileDialog = new SaveFileDialog())
                 {
-                    savedi.FileName = lstS3FilesBox.SelectedItem.ToString();
-                    if (savedi.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                    saveFileDialog.FileName = lstS3FilesBox.SelectedItem.ToString();
+                    if (saveFileDialog.ShowDialog() == DialogResult.OK)
                     {
                         try
                         {
-                            string imageKey = lstS3FilesBox.SelectedItem.ToString();
-                            string extension = imageKey.Substring(imageKey.LastIndexOf("."));
-                            string imagePath = savedi.FileName;
+                            string fileKey = lstS3FilesBox.SelectedItem.ToString();
+                            string filePath = saveFileDialog.FileName;
 
-                            Stream imageStream = new MemoryStream();
-
-
-                            GetObjectRequest request = new GetObjectRequest
+                            using (Stream fileStream = new MemoryStream())
                             {
-                                BucketName = _myBucketName,
-                                Key = imageKey,
-                            };
-                            using (GetObjectResponse response = _s3Client.GetObject(request))
-                            {
-                                response.ResponseStream.CopyTo(imageStream);
+                                GetObjectRequest request = new GetObjectRequest
+                                {
+                                    BucketName = _myBucketName,
+                                    Key = fileKey,
+                                };
+                                using (GetObjectResponse response = _s3Client.GetObject(request))
+                                {
+                                    response.ResponseStream.CopyTo(fileStream);
+                                }
+
+                                fileStream.Position = 0;
+
+                                SaveStreamToFile(filePath, fileStream);
+
+                                MessageBox.Show("File Downloaded from S3 Successfully.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
                             }
-
-                            imageStream.Position = 0;
-
-                            Code.Misc.SaveStreamToFile(imagePath, imageStream);
-
-                            if (chkImagePReview.Checked)
-                                picPreview.Image = Image.FromFile(imagePath);
-
-                            MessageBox.Show("File Downloaded from S3 Successfully.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
                         catch (Exception ex)
                         {
-                            MessageBox.Show(ex.Message, this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            MessageBox.Show($"Error downloading file: {ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                     }
                 }
+            }
+        }
+
+        private void SaveStreamToFile(string filePath, Stream inputStream)
+        {
+            using (FileStream outputStream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+            {
+                inputStream.CopyTo(outputStream);
             }
         }
 
