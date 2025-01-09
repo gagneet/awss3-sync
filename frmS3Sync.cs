@@ -511,6 +511,50 @@ namespace AWSS3Sync
             }
         }
 
+        private async void btnMoveToBackup_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                foreach (var selectedItem in lstS3FilesBox.SelectedItems)
+                {
+                    string fileKey = selectedItem.ToString();
+                    string backupKey = $"backup-s3/{fileKey}";
+
+                    // Copy the file to the backup folder
+                    var copyRequest = new CopyObjectRequest
+                    {
+                        SourceBucket = _myBucketName,
+                        SourceKey = fileKey,
+                        DestinationBucket = _myBucketName,
+                        DestinationKey = backupKey
+                    };
+
+                    await _s3Client.CopyObjectAsync(copyRequest);
+
+                    // Delete the original file
+                    var deleteRequest = new DeleteObjectRequest
+                    {
+                        BucketName = _myBucketName,
+                        Key = fileKey
+                    };
+
+                    await _s3Client.DeleteObjectAsync(deleteRequest);
+
+                    Console.WriteLine($"Moved {fileKey} to {backupKey} and deleted the original.");
+                }
+
+                MessageBox.Show("Selected files moved to backup and will be deleted in 28 days.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (AmazonS3Exception s3Ex)
+            {
+                MessageBox.Show($"Error moving files to backup: {s3Ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An unexpected error occurred: {ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void SaveStreamToFile(string filePath, Stream inputStream)
         {
             using (FileStream outputStream = new FileStream(filePath, FileMode.Create, FileAccess.Write))

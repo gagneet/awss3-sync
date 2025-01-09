@@ -34,6 +34,7 @@
             this.btnSyncFolder = new System.Windows.Forms.Button();
             this.btnListS3Files = new System.Windows.Forms.Button();
             this.btnDownloadFiles = new System.Windows.Forms.Button();
+            this.btnDeleteFiles = new System.Windows.Forms.Button();
             this.lblSourceFileName = new System.Windows.Forms.Label();
             this.lstS3FilesBox = new System.Windows.Forms.ListBox();
             this.lstLocalFilesBox = new System.Windows.Forms.ListBox();
@@ -53,17 +54,6 @@
             this.btnUploadFile.UseVisualStyleBackColor = true;
             this.btnUploadFile.Click += new System.EventHandler(this.btnUploadFile_Click);
             // 
-            // btnBrowseFolder
-            // 
-            this.btnBrowseFolder.Location = new System.Drawing.Point(640, 12);
-            this.btnBrowseFolder.Margin = new System.Windows.Forms.Padding(4);
-            this.btnBrowseFolder.Name = "btnBrowseFolder";
-            this.btnBrowseFolder.Size = new System.Drawing.Size(125, 30);
-            this.btnBrowseFolder.TabIndex = 2;
-            this.btnBrowseFolder.Text = "Browse &Folder";
-            this.btnBrowseFolder.UseVisualStyleBackColor = true;
-            this.btnBrowseFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
-            // 
             // btnUploadFolder
             // 
             this.btnUploadFolder.Location = new System.Drawing.Point(770, 12);
@@ -74,6 +64,17 @@
             this.btnUploadFolder.Text = "Folder &Upload";
             this.btnUploadFolder.UseVisualStyleBackColor = true;
             this.btnUploadFolder.Click += new System.EventHandler(this.btnUploadFolder_Click);
+            // 
+            // btnBrowseFolder
+            // 
+            this.btnBrowseFolder.Location = new System.Drawing.Point(640, 12);
+            this.btnBrowseFolder.Margin = new System.Windows.Forms.Padding(4);
+            this.btnBrowseFolder.Name = "btnBrowseFolder";
+            this.btnBrowseFolder.Size = new System.Drawing.Size(125, 30);
+            this.btnBrowseFolder.TabIndex = 2;
+            this.btnBrowseFolder.Text = "Browse &Folder";
+            this.btnBrowseFolder.UseVisualStyleBackColor = true;
+            this.btnBrowseFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
             // 
             // btnSyncFolder
             // 
@@ -108,6 +109,18 @@
             this.btnDownloadFiles.Text = "&Download";
             this.btnDownloadFiles.UseVisualStyleBackColor = true;
             this.btnDownloadFiles.Click += new System.EventHandler(this.btnDownloadFiles_Click);
+            // 
+            // btnDeleteFiles
+            // 
+            this.btnDeleteFiles.Location = new System.Drawing.Point(1365, 765);
+            this.btnDeleteFiles.Margin = new System.Windows.Forms.Padding(4);
+            this.btnDeleteFiles.Name = "btnDeleteFiles";
+            this.btnDeleteFiles.Size = new System.Drawing.Size(125, 30);
+            this.btnDeleteFiles.TabIndex = 11;
+            this.btnDeleteFiles.Text = "&Delete Files";
+            this.btnDeleteFiles.Enabled = false;
+            this.btnDeleteFiles.UseVisualStyleBackColor = true;
+            this.btnDeleteFiles.Click += new System.EventHandler(this.btnMoveToBackup_Click);
             // 
             // lblSourceFileName
             // 
@@ -169,6 +182,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1800, 850);
+            this.Controls.Add(this.btnDeleteFiles);
             this.Controls.Add(this.btnBrowseFolder);
             this.Controls.Add(this.lstLocalFilesBox);
             this.Controls.Add(this.btnSyncFolder);
@@ -198,6 +212,7 @@
         private System.Windows.Forms.Button btnBrowseFolder;
         private System.Windows.Forms.Button btnListS3Files;
         private System.Windows.Forms.Button btnDownloadFiles;
+        private System.Windows.Forms.Button btnDeleteFiles;
         private System.Windows.Forms.ListBox lstS3FilesBox;
         private System.Windows.Forms.ListBox lstLocalFilesBox;
         private System.Windows.Forms.Label lblSourceFileName;
