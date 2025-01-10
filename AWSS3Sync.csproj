@@ -114,6 +114,9 @@
     <Compile Include="frmS3Sync.Designer.cs">
       <DependentUpon>frmS3Sync.cs</DependentUpon>
     </Compile>
+    <Compile Include="frmS3SyncUpload.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="frmS3Sync.resx">
