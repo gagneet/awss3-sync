@@ -37,6 +37,11 @@ namespace AWSS3Sync
             _myBucketName = awsOptions["BucketName"];
         }
 
+        public virtual void InitializeForm()
+        {
+            // Implement any common initialization logic here
+        }
+
         private string selectedFolderPath;
         private List<string> filesToUpload = new List<string>();
 
@@ -46,7 +51,9 @@ namespace AWSS3Sync
         private void btnSelectFolder_Click(object sender, EventArgs e)
         {
             // Disable the Upload/Sync button
-            btnSyncFolder.Enabled = true;
+            btnSyncFolder.Enabled = false;
+            btnUploadFile.Enabled = false;
+            btnUploadFolder.Enabled = false;
 
             using (var folderBrowserDialog = new FolderBrowserDialog())
             {
@@ -62,12 +69,13 @@ namespace AWSS3Sync
                         //lstLocalFilesBox.AppendText(filePath + Environment.NewLine);
                         lstLocalFilesBox.Items.Add(filePath);
                     }
-
-                    // Enable the Upload & Sync buttons
-                    btnSyncFolder.Enabled = true;
-                    btnUploadFolder.Enabled = true;
                 }
             }
+
+            // Enable the Upload & Sync buttons
+            btnSyncFolder.Enabled = true;
+            btnUploadFolder.Enabled = true;
+            btnUploadFile.Enabled = true;
         }
 
         /*
@@ -99,6 +107,10 @@ namespace AWSS3Sync
          */
         private async void btnSyncFiles_Click(object sender, EventArgs e)
         {
+            // disable the Sync & Upload button, so that user has to select the folder again
+            btnUploadFolder.Enabled = false;
+            btnUploadFile.Enabled = false;
+
             try
             {
                 // Specify the number of days
@@ -172,6 +184,10 @@ namespace AWSS3Sync
             {
                 MessageBox.Show($"An unexpected error occurred: {ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+
+            // Enable the Upload file and folder buttons, so that user has to select the folder again
+            btnUploadFolder.Enabled = false;
+            btnUploadFile.Enabled = true;
         }
 
         private async Task<Dictionary<string, S3Object>> ListS3ObjectsAsync(string bucketName)
@@ -202,6 +218,9 @@ namespace AWSS3Sync
 
         private async void btnUploadFile_Click(object sender, EventArgs e)
         {
+            // Disable the browse/select folder button, so that user does not accidently select a new folder
+            btnBrowseFolder.Enabled = false;
+
             OpenFileDialog openFileDialog = new OpenFileDialog();
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
@@ -250,6 +269,9 @@ namespace AWSS3Sync
                     }
                 }
             }
+
+            // Enable the Browse/Select Folder button
+            btnBrowseFolder.Enabled = true;
         }
 
         /*
@@ -331,6 +353,9 @@ namespace AWSS3Sync
 
         private async void btnUploadFolder_Click(object sender, EventArgs e)
         {
+            // Disable the Sync & Upload button, so that user has to select the folder again
+            btnSyncFolder.Enabled = false;
+
             if (MessageBox.Show("Do you want to upload the listed files to S3?", this.Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
             {
                 try
@@ -365,6 +390,9 @@ namespace AWSS3Sync
                     MessageBox.Show($"An unexpected error occurred: {ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
+
+            // Enable the Sync & Upload button
+            btnSyncFolder.Enabled = true;
         }
 
         /*
@@ -413,28 +441,42 @@ namespace AWSS3Sync
         }
         */
 
+        /*
+         * Function to check the timestamp of the files on AWS S3 and then sync only new files
+         */
         private async void btnSyncFolder_Click(object sender, EventArgs e)
         {
-            using (var folderBrowserDialog = new FolderBrowserDialog())
+            // Disable the File and Folder Upload buttons while synchronization is in progress
+            btnUploadFolder.Enabled = false;
+            btnUploadFile.Enabled = false;
+
+            try
             {
-                if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+                if (lstLocalFilesBox.Items.Count == 0)
                 {
-                    string localFolderPath = folderBrowserDialog.SelectedPath;
-                    string bucketName = _myBucketName; // You might want to get this from a TextBox as well
-
-                    try
-                    {
-                        await SyncFilesToS3Async(localFolderPath, bucketName);
-
-                        MessageBox.Show("File synchronization completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"An error occurred during synchronization: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
+                    MessageBox.Show("No files available in the listbox for synchronization.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
                 }
+
+                string localFolderPath = lblSourceFileName.Text; // Taking the folder path from the label
+                string bucketName = _myBucketName; // You might want to get this from a TextBox as well
+
+                await SyncFilesToS3Async(localFolderPath, bucketName);
+
+                MessageBox.Show("File synchronization completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An error occurred during synchronization: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                // Enable the File & Folder buttons after synchronization
+                btnUploadFolder.Enabled = true;
+                btnUploadFile.Enabled = true;
             }
         }
+
 
         public async Task SyncFilesToS3Async(string localFolderPath, string bucketName)
         {
@@ -445,11 +487,15 @@ namespace AWSS3Sync
             }
 
             var s3ObjectsMetadata = await GetObjectsMetadataFromS3Async(bucketName);
+            var localFilesSet = new HashSet<string>();
 
-            foreach (var filePath in Directory.GetFiles(localFolderPath))
+            foreach (var item in lstLocalFilesBox.Items)
             {
+                string filePath = item.ToString(); // Assuming that the listbox contains the full paths of the files
                 string fileName = Path.GetFileName(filePath);
                 string s3Key = fileName;
+
+                localFilesSet.Add(s3Key);
 
                 if (!s3ObjectsMetadata.ContainsKey(s3Key))
                 {
@@ -472,6 +518,35 @@ namespace AWSS3Sync
                     }
                 }
             }
+
+            // Move files not present locally but present in S3 to backup folder
+            string backupBucketName = $"{bucketName}-backup";
+            foreach (var s3Key in s3ObjectsMetadata.Keys)
+            {
+                if (!localFilesSet.Contains(s3Key))
+                {
+                    await MoveS3ObjectToBackup(bucketName, s3Key, backupBucketName);
+                    Console.WriteLine($"Moved to backup: {s3Key}");
+                }
+            }
+        }
+
+        private async Task MoveS3ObjectToBackup(string sourceBucketName, string sourceKey, string backupBucketName)
+        {
+            var copyRequest = new CopyObjectRequest
+            {
+                SourceBucket = sourceBucketName,
+                SourceKey = sourceKey,
+                DestinationBucket = backupBucketName,
+                DestinationKey = sourceKey
+            };
+
+            await _s3Client.CopyObjectAsync(copyRequest);
+            await _s3Client.DeleteObjectAsync(new DeleteObjectRequest
+            {
+                BucketName = sourceBucketName,
+                Key = sourceKey
+            });
         }
 
         private async Task<Dictionary<string, DateTime>> GetObjectsMetadataFromS3Async(string bucketName)
