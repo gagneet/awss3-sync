@@ -107,19 +107,21 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Code\Misc.cs" />
-    <Compile Include="frmS3Sync.cs">
+    <Compile Include="Core\Model\AppConstants.cs" />
+    <Compile Include="Core\S3\S3Service.cs" />
+    <Compile Include="Core\Utils\Misc.cs" />
+    <Compile Include="UI\frmS3Sync.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="frmS3Sync.Designer.cs">
-      <DependentUpon>frmS3Sync.cs</DependentUpon>
+    <Compile Include="UI\frmS3Sync.Designer.cs">
+      <DependentUpon>UI\frmS3Sync.cs</DependentUpon>
     </Compile>
-    <Compile Include="frmS3SyncUpload.cs">
+    <Compile Include="UI\frmS3SyncUpload.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="frmS3Sync.resx">
+    <EmbeddedResource Include="UI\frmS3Sync.resx">
       <DependentUpon>frmS3Sync.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
