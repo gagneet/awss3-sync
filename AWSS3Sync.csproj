@@ -107,6 +107,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Core\Model\AppConstants.cs" />
     <Compile Include="Core\S3\S3Service.cs" />
     <Compile Include="Core\Utils\Misc.cs" />
     <Compile Include="UI\frmS3Sync.cs">

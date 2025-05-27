@@ -179,11 +179,35 @@
             this.chkImagePReview.Text = "Image Preview";
             this.chkImagePReview.UseVisualStyleBackColor = true;
             // 
+            // chkGrantUserRoleAccess
+            // 
+            this.chkGrantUserRoleAccess.AutoSize = true;
+            this.chkGrantUserRoleAccess.Location = new System.Drawing.Point(475, 50); 
+            this.chkGrantUserRoleAccess.Name = "chkGrantUserRoleAccess";
+            this.chkGrantUserRoleAccess.Size = new System.Drawing.Size(180, 20); // Approximate size
+            this.chkGrantUserRoleAccess.TabIndex = 12; // Ensure this is a unique and sensible TabIndex
+            this.chkGrantUserRoleAccess.Text = "Grant User Role Access";
+            this.chkGrantUserRoleAccess.UseVisualStyleBackColor = true;
+            // 
+            // btnManageRoles
+            // 
+            this.btnManageRoles.Enabled = false; // Initially disabled
+            this.btnManageRoles.Location = new System.Drawing.Point(1600, 730); // Adjust location as needed
+            this.btnManageRoles.Margin = new System.Windows.Forms.Padding(4);
+            this.btnManageRoles.Name = "btnManageRoles";
+            this.btnManageRoles.Size = new System.Drawing.Size(160, 30); // Slightly wider for text
+            this.btnManageRoles.TabIndex = 13; // Ensure unique and sensible TabIndex
+            this.btnManageRoles.Text = "Manage Access Roles";
+            this.btnManageRoles.UseVisualStyleBackColor = true;
+            this.btnManageRoles.Click += new System.EventHandler(this.btnManageRoles_Click);
+            // 
             // frmS3Sync
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1800, 850);
+            this.Controls.Add(this.btnManageRoles); // Added here
+            this.Controls.Add(this.chkGrantUserRoleAccess); 
             this.Controls.Add(this.btnDeleteFiles);
             this.Controls.Add(this.btnBrowseFolder);
             this.Controls.Add(this.lstLocalFilesBox);
@@ -220,6 +244,8 @@
         private System.Windows.Forms.Label lblSourceFileName;
         private System.Windows.Forms.PictureBox picPreview;
         private System.Windows.Forms.CheckBox chkImagePReview;
+        private System.Windows.Forms.CheckBox chkGrantUserRoleAccess;
+        private System.Windows.Forms.Button btnManageRoles; 
     }
 }
 

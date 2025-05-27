@@ -96,7 +96,7 @@ namespace AWSS3Sync.Core.S3
         }
 
         // Method 3: Based on UploadFileToS3Async from frmS3Sync.cs
-        public async Task UploadFileAsync(string filePath, string s3KeyName, string bucketName = null, string contentType = null, S3CannedACL acl = null)
+        public async Task UploadFileAsync(string filePath, string s3KeyName, string bucketName = null, string contentType = null, S3CannedACL acl = null, List<Tag> objectTags = null)
         {
             using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
             {
@@ -109,7 +109,106 @@ namespace AWSS3Sync.Core.S3
                     CannedACL = acl ?? S3CannedACL.Private, // Default to private if not specified
                     AutoCloseStream = true
                 };
+
+                if (objectTags != null && objectTags.Any())
+                {
+                    putObjectRequest.TagSet = objectTags;
+                }
+
                 await _s3Client.PutObjectAsync(putObjectRequest);
+            }
+        }
+
+        public async Task SetObjectTaggingAsync(string s3KeyName, List<Tag> tags, string bucketName = null)
+        {
+            if (tags == null)
+            {
+                // S3 requires a non-null tag set for PutObjectTagging.
+                // If the intention is to remove all tags, an empty list should be passed.
+                // Or, consider throwing an ArgumentNullException if tags are required.
+                // For now, let's assume an empty list means remove tags.
+                tags = new List<Tag>(); 
+            }
+
+            var putTaggingRequest = new PutObjectTaggingRequest
+            {
+                BucketName = bucketName ?? _myBucketName,
+                Key = s3KeyName,
+                Tagging = new Tagging
+                {
+                    TagSet = tags
+                }
+            };
+
+            await _s3Client.PutObjectTaggingAsync(putTaggingRequest);
+        }
+
+        public async Task<GetObjectTaggingResponse> GetObjectTaggingAsync(string s3KeyName, string bucketName = null)
+        {
+            var getTaggingRequest = new GetObjectTaggingRequest
+            {
+                BucketName = bucketName ?? _myBucketName,
+                Key = s3KeyName
+            };
+
+            return await _s3Client.GetObjectTaggingAsync(getTaggingRequest);
+        }
+
+        public async Task ApplyTagsRecursivelyAsync(string s3Prefix, List<Tag> tags, string bucketName = null)
+        {
+            string targetBucket = bucketName ?? _myBucketName;
+
+            // Ensure prefix ends with a slash if it's meant to be a folder
+            if (!string.IsNullOrEmpty(s3Prefix) && !s3Prefix.EndsWith("/"))
+            {
+                s3Prefix += "/";
+            }
+
+            // List all objects under the prefix. ListS3ObjectsMetadataAsync handles pagination.
+            // We need to ensure we get all objects if the prefix itself is deep.
+            // The existing ListS3ObjectsMetadataAsync lists all objects in the bucket if prefix is null or empty,
+            // but for actual recursive tagging, we need to list objects *under* the given prefix.
+            // The ListObjectsV2Request in ListS3ObjectsMetadataAsync needs to be adapted or a new listing method created for prefixes.
+
+            // For now, let's assume ListS3ObjectsMetadataAsync can be used if we iterate and filter client-side,
+            // or ideally, it should accept a prefix.
+            // Re-checking ListS3ObjectsMetadataAsync: it doesn't take a prefix for filtering directly in its current form.
+            // It lists all and then the caller would filter. This is inefficient for large buckets.
+            // A better ListObjectsV2Request would set the Prefix property.
+
+            // Let's define a more specific listing method for this, or modify ListS3ObjectsMetadataAsync.
+            // For now, creating a temporary specific list method here for clarity.
+            // Ideally, this listing logic would be part of a more generic, prefix-aware listing method.
+
+            var objectsToTag = new List<S3Object>();
+            string continuationToken = null;
+
+            do
+            {
+                var listRequest = new ListObjectsV2Request
+                {
+                    BucketName = targetBucket,
+                    Prefix = s3Prefix, // Use the S3 prefix capability
+                    ContinuationToken = continuationToken
+                };
+                var listResponse = await _s3Client.ListObjectsV2Async(listRequest);
+                
+                objectsToTag.AddRange(listResponse.S3Objects);
+                
+                continuationToken = listResponse.NextContinuationToken;
+            } while (continuationToken != null);
+
+
+            foreach (var s3Object in objectsToTag)
+            {
+                // Don't try to tag the folder placeholder itself if it appears in the list
+                // (S3 doesn't really have folder objects for tagging in the same way as files)
+                if (s3Object.Key.EndsWith("/") && s3Object.Size == 0) 
+                {
+                    continue; 
+                }
+                await SetObjectTaggingAsync(s3Object.Key, tags, targetBucket);
+                Console.WriteLine($"Tagged: {s3Object.Key}"); // For logging/debugging
             }
         }
         
@@ -172,7 +271,7 @@ namespace AWSS3Sync.Core.S3
 
         // Method 7: Sync logic from btnSyncFiles_Click in frmS3Sync.cs
         // This method takes a list of local files and the base path to calculate relative paths
-        public async Task SyncLocalFilesToS3Async(IEnumerable<string> localFilePaths, string localBaseFolderPath, int daysToConsider = 60, string bucketName = null)
+        public async Task SyncLocalFilesToS3Async(IEnumerable<string> localFilePaths, string localBaseFolderPath, int daysToConsider = 60, string bucketName = null, List<Tag> objectTags = null)
         {
             string targetBucket = bucketName ?? _myBucketName;
             var existingS3Objects = await ListS3ObjectsMetadataAsync(targetBucket); // Uses Method 1
@@ -207,21 +306,23 @@ namespace AWSS3Sync.Core.S3
                 {
                     // ContentType would need to be determined here if desired, e.g. using Misc.GetContentType
                     // For now, passing null. The UI layer can fetch it.
-                    await UploadFileAsync(filePath, relativePath, targetBucket, contentType: null); // Uses Method 3
+                    // Pass the objectTags to the UploadFileAsync method
+                    await UploadFileAsync(filePath, relativePath, targetBucket, contentType: null, acl: null, objectTags: objectTags); 
                     Console.WriteLine($"Uploaded via SyncLocalFilesToS3Async: {relativePath}");
                 }
             }
         }
 
         // Method 8: Core folder upload logic from btnUploadFolder_Click in frmS3Sync.cs
-        public async Task UploadFolderContentsAsync(IEnumerable<string> localFilePaths, string localBaseFolderPath, string bucketName = null)
+        public async Task UploadFolderContentsAsync(IEnumerable<string> localFilePaths, string localBaseFolderPath, string bucketName = null, List<Tag> objectTags = null)
         {
             string targetBucket = bucketName ?? _myBucketName;
             foreach (string filePath in localFilePaths)
             {
                 string relativePath = GetRelativePath(localBaseFolderPath, filePath).Replace("\\", "/");
                 // ContentType determination would be needed here if desired.
-                await UploadFileAsync(filePath, relativePath, targetBucket, contentType: null); // Uses Method 3
+                // Pass the objectTags to the UploadFileAsync method
+                await UploadFileAsync(filePath, relativePath, targetBucket, contentType: null, acl: null, objectTags: objectTags); 
                 Console.WriteLine($"Uploaded via UploadFolderContentsAsync: {relativePath}");
             }
         }

@@ -9,6 +9,7 @@ using System.Windows.Forms;
 // Add using for the new service
 using AWSS3Sync.Core.S3;
 using AWSS3Sync.Core.Utils; // For Misc class
+using AWSS3Sync.Core.Model; // Added for AppConstants
 
 namespace AWSS3Sync.UI // Updated namespace
 {
@@ -17,6 +18,7 @@ namespace AWSS3Sync.UI // Updated namespace
         private readonly S3Service _s3Service; // New S3 service instance
         private string selectedFolderPath;
         private List<string> filesToUpload = new List<string>();
+        private string _currentUserRole = AWSS3Sync.Core.Model.AppConstants.RoleAdmin; // ADD THIS LINE
 
         public frmS3Sync()
         {
@@ -38,7 +40,9 @@ namespace AWSS3Sync.UI // Updated namespace
                 btnUploadFolder.Enabled = false;
                 btnListS3Files.Enabled = false;
                 btnDownloadFiles.Enabled = false;
-                btnMoveToBackup.Enabled = false;
+                btnMoveToBackup.Enabled = false; // Assuming btnMoveToBackup is the intended control name
+                if (this.Controls.ContainsKey("btnDeleteFiles")) (this.Controls["btnDeleteFiles"] as Button).Enabled = false; // If btnDeleteFiles is used
+                if (this.Controls.ContainsKey("btnManageRoles")) (this.Controls["btnManageRoles"] as Button).Enabled = false;
             }
         }
 
@@ -88,8 +92,20 @@ namespace AWSS3Sync.UI // Updated namespace
 
             try
             {
-                int days = 60; // This could be a UI input
-                await _s3Service.SyncLocalFilesToS3Async(filesToUpload, selectedFolderPath, days);
+                int days = 60; 
+                var objectTags = new List<Tag>();
+                if (this.chkGrantUserRoleAccess.Checked)
+                {
+                    objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleUser });
+                }
+                else
+                {
+                    objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleAdmin });
+                }
+                
+                // TODO: This call needs S3Service.SyncLocalFilesToS3Async to be updated to accept 'objectTags'
+                // Similar to UploadFolderContentsAsync, this will be handled by modifying the S3Service method later.
+                await _s3Service.SyncLocalFilesToS3Async(filesToUpload, selectedFolderPath, days, objectTags: objectTags);
                 MessageBox.Show("Folder synchronization completed successfully!", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (AmazonS3Exception s3Ex)
@@ -128,7 +144,18 @@ namespace AWSS3Sync.UI // Updated namespace
                         string fileExtension = Path.GetExtension(filePath).TrimStart('.');
                         string contentType = Misc.GetContentType(fileExtension); // Using the utility class
 
-                        await _s3Service.UploadFileAsync(filePath, s3KeyName, contentType: contentType, acl: S3CannedACL.Private);
+                        var objectTags = new List<Tag>();
+                        if (this.chkGrantUserRoleAccess.Checked)
+                        {
+                            objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleUser });
+                        }
+                        else
+                        {
+                            // Default for Admin upload if not granting to User
+                            objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleAdmin });
+                        }
+
+                        await _s3Service.UploadFileAsync(filePath, s3KeyName, contentType: contentType, acl: S3CannedACL.Private, objectTags: objectTags);
                         MessageBox.Show("File uploaded to S3 Bucket Successfully.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     catch (AmazonS3Exception s3Ex)
@@ -163,8 +190,21 @@ namespace AWSS3Sync.UI // Updated namespace
                 btnUploadFolder.Enabled = false;
                 try
                 {
-                    // The S3Service.UploadFolderContentsAsync expects file paths and the base path.
-                    await _s3Service.UploadFolderContentsAsync(filesToUpload, selectedFolderPath);
+                    var objectTags = new List<Tag>();
+                    if (this.chkGrantUserRoleAccess.Checked)
+                    {
+                        objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleUser });
+                    }
+                    else
+                    {
+                        objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleAdmin });
+                    }
+
+                    // TODO: This call needs S3Service.UploadFolderContentsAsync to be updated to accept 'objectTags'
+                    // For now, this change highlights where tags would be passed.
+                    // The actual modification of UploadFolderContentsAsync to accept and use tags will be a separate step for S3Service.cs
+                    // For now, we will call it without the tags, and the next step will be to modify S3Service.UploadFolderContentsAsync
+                    await _s3Service.UploadFolderContentsAsync(filesToUpload, selectedFolderPath, objectTags: objectTags); 
                     MessageBox.Show("Folder uploaded successfully!", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (AmazonS3Exception s3Ex)
@@ -296,8 +336,80 @@ namespace AWSS3Sync.UI // Updated namespace
 
         private void lstFiles_SelectedIndexChanged(object sender, EventArgs e)
         {
-            btnDownloadFiles.Enabled = lstS3FilesBox.SelectedItem != null;
-            btnMoveToBackup.Enabled = lstS3FilesBox.SelectedItems.Count > 0;
+            bool itemSelected = lstS3FilesBox.SelectedItem != null;
+            bool itemsSelected = lstS3FilesBox.SelectedItems.Count > 0; // For multi-select actions
+
+            btnDownloadFiles.Enabled = itemSelected; 
+            // btnMoveToBackup was named btnDeleteFiles in Designer.cs, ensure consistency or update one.
+            // Assuming btnDeleteFiles is the correct name for the 'Move to Backup' functionality control.
+            if (this.Controls.ContainsKey("btnDeleteFiles")) // Check if btnDeleteFiles exists
+                 (this.Controls["btnDeleteFiles"] as Button).Enabled = itemsSelected; 
+            else if (this.Controls.ContainsKey("btnMoveToBackup")) // Fallback or alternative name
+                 (this.Controls["btnMoveToBackup"] as Button).Enabled = itemsSelected;
+
+            if (this.Controls.ContainsKey("btnManageRoles")) // Check if btnManageRoles exists
+                 (this.Controls["btnManageRoles"] as Button).Enabled = itemsSelected;
+        }
+
+        private async void btnManageRoles_Click(object sender, EventArgs e)
+        {
+            if (_s3Service == null) { MessageBox.Show("S3 Service not initialized.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+            if (lstS3FilesBox.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("Please select one or more S3 items to manage their roles.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // For simplicity, this first version focuses on "Grant User Role Access"
+            // A more complex UI could allow choosing which role or removing roles.
+            DialogResult confirmation = MessageBox.Show("Grant 'User Role' access to the selected item(s)?\n\n(This will tag them as accessible by the 'User' role. Existing items not explicitly granted 'User' access are typically only accessible by Admin/Executive).", "Confirm Role Change", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (confirmation == DialogResult.Yes)
+            {
+                var userAccessTags = new List<Tag> { new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleUser } };
+                var itemsToProcess = lstS3FilesBox.SelectedItems.Cast<string>().ToList();
+                int successCount = 0;
+                int failCount = 0;
+
+                this.Cursor = Cursors.WaitCursor; // Show wait cursor
+
+                foreach (string itemKey in itemsToProcess)
+                {
+                    try
+                    {
+                        if (itemKey.EndsWith("/")) // Assume it's a folder/prefix
+                        {
+                            await _s3Service.ApplyTagsRecursivelyAsync(itemKey, userAccessTags);
+                        }
+                        else // Assume it's a file
+                        {
+                            await _s3Service.SetObjectTaggingAsync(itemKey, userAccessTags);
+                        }
+                        successCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failCount++;
+                        Console.WriteLine($"Failed to apply tags to {itemKey}: {ex.Message}");
+                        // Optionally, collect detailed errors to show user later
+                    }
+                }
+                this.Cursor = Cursors.Default; // Restore cursor
+
+                string summaryMessage = $"{successCount} item(s) successfully tagged for 'User Role' access.";
+                if (failCount > 0)
+                {
+                    summaryMessage += $"\n{failCount} item(s) failed. Check console/logs for details.";
+                    MessageBox.Show(summaryMessage, "Role Management Partially Successful", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                else
+                {
+                    MessageBox.Show(summaryMessage, "Role Management Successful", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+
+                // Refresh the S3 file list to reflect potential changes (though tags aren't directly visible here yet)
+                btnListS3Files_Click(null, null);
+            }
         }
 
         private void frmS3Access_Load(object sender, EventArgs e)
