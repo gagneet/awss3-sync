@@ -1,4 +1,4 @@
-﻿namespace AWSS3Sync
+﻿namespace AWSS3Sync.UI
 {
     partial class frmS3Sync
     {
