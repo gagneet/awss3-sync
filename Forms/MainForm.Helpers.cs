@@ -123,6 +123,10 @@ namespace S3FileManager
         {
             try
             {
+                // Check if TreeView is valid and handle is created
+                if (treeView == null || treeView.IsDisposed || !treeView.IsHandleCreated)
+                    return 0;
+
                 return SendMessage(treeView.Handle, TVM_GETSCROLLPOS, 0, 0);
             }
             catch
@@ -135,7 +139,31 @@ namespace S3FileManager
         {
             try
             {
-                SendMessage(treeView.Handle, TVM_SETSCROLLPOS, 0, position);
+                // Check if TreeView is valid and handle is created
+                if (treeView == null || treeView.IsDisposed || !treeView.IsHandleCreated || position == 0)
+                    return;
+
+                // Use a timer to delay the scroll position setting to ensure TreeView is fully loaded
+                var timer = new System.Windows.Forms.Timer();
+                timer.Interval = 50; // Small delay
+                timer.Tick += (s, e) =>
+                {
+                    timer.Stop();
+                    timer.Dispose();
+
+                    try
+                    {
+                        if (!treeView.IsDisposed && treeView.IsHandleCreated)
+                        {
+                            SendMessage(treeView.Handle, TVM_SETSCROLLPOS, 0, position);
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore scroll position errors
+                    }
+                };
+                timer.Start();
             }
             catch
             {

@@ -193,7 +193,14 @@ namespace S3FileManager
                         bucketLabel.Text = "Loading...";
                 }
 
+                // Load S3 files based on user role
                 _s3Files = await _s3Service.ListFilesAsync(_currentUser.Role);
+
+                // Handle case where user has no accessible files
+                if (_s3Files == null)
+                {
+                    _s3Files = new List<S3FileItem>();
+                }
 
                 // Update UI on main thread
                 if (this.InvokeRequired)
@@ -203,6 +210,10 @@ namespace S3FileManager
             }
             catch (Exception ex)
             {
+                // Ensure _s3Files is never null
+                if (_s3Files == null)
+                    _s3Files = new List<S3FileItem>();
+
                 var action = new Action(() =>
                 {
                     MessageBox.Show($"Error loading S3 files: {ex.Message}", "S3 Error",
@@ -211,6 +222,9 @@ namespace S3FileManager
                     var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
                     if (bucketLabel != null)
                         bucketLabel.Text = "Error loading bucket";
+
+                    // Update the tree view even with empty list to clear any previous content
+                    UpdateS3TreeViewOptimized();
                 });
 
                 if (this.InvokeRequired)
@@ -230,9 +244,8 @@ namespace S3FileManager
 
             try
             {
-                // Store current expanded states and scroll position
+                // Store current expanded states (skip scroll position for now to avoid errors)
                 var expandedNodes = new HashSet<string>();
-                var scrollPosition = GetTreeViewScrollPosition(s3TreeView);
                 StoreExpandedStates(s3TreeView.Nodes, expandedNodes);
 
                 s3TreeView.Nodes.Clear();
@@ -254,9 +267,6 @@ namespace S3FileManager
                 // Restore checked states
                 RestoreCheckedStates(s3TreeView.Nodes, _s3CheckedItems, true);
 
-                // Restore scroll position
-                SetTreeViewScrollPosition(s3TreeView, scrollPosition);
-
                 // Update UI labels
                 var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
                 if (bucketLabel != null)
@@ -266,6 +276,12 @@ namespace S3FileManager
                 }
 
                 UpdateS3SelectionCount();
+            }
+            catch (Exception ex)
+            {
+                // Handle any errors gracefully
+                MessageBox.Show($"Error updating tree view: {ex.Message}", "Tree View Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {

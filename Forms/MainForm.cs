@@ -31,6 +31,7 @@ namespace S3FileManager
             _s3Service = new S3Service();
             _fileService = new FileService();
             InitializeComponent();
+            this.Text = $"AWS S3 File Manager - {_currentUser.Username} ({_currentUser.Role})";
             SetupUserInterface();
         }
 
@@ -41,7 +42,6 @@ namespace S3FileManager
             this.AutoScaleDimensions = new SizeF(8F, 16F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(1400, 900);
-            this.Text = $"AWS S3 File Manager - {_currentUser.Username} ({_currentUser.Role})";
             this.StartPosition = FormStartPosition.CenterScreen;
 
             var mainPanel = new TableLayoutPanel
