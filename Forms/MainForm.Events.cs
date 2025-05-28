@@ -269,22 +269,48 @@ namespace S3FileManager
                 {
                     // New sync: S3 to Local
                     progressForm.UpdateMessage("Downloading S3 files to local folder...");
-                    await SyncS3ToLocal(_selectedLocalPath, progressForm);
+                    List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, progressForm);
+                    
+                    // Close progress form before showing messages
+                    progressForm.Close(); 
+
+                    if (extraLocalFiles != null && extraLocalFiles.Any())
+                    {
+                        string fileList = string.Join(Environment.NewLine, extraLocalFiles.Select(f => $"- {f}"));
+                        string warningMessage = $"Sync complete. However, the following local files do not exist in the S3 bucket:{Environment.NewLine}{Environment.NewLine}{fileList}{Environment.NewLine}{Environment.NewLine}You may want to upload these files to S3 or remove them from your local folder if they are no longer needed.";
+                        MessageBox.Show(warningMessage, "Sync Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Sync completed successfully! No extra local files found.", "Success",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                 }
 
-                progressForm.Close();
-                MessageBox.Show("Sync completed successfully!", "Success",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Refresh both views - moved out of the specific S3 to Local block if progressForm was closed there
+                // If progressForm was closed inside the 'else', it should not be closed again in a finally block
+                // that might not be aware of the context.
+                // For now, assuming progressForm.Close() in the 'else' is sufficient before messages.
+                // If SyncS3ToLocal throws, progressForm might not be closed if not handled by a broader try/finally.
 
-                // Refresh both views
-                await LoadS3FilesAsync();
-                LoadLocalFiles(_selectedLocalPath);
+                // The original code had progressForm.Close() after both sync types, then messages.
+                // Let's ensure progressForm is closed before any message box.
+                // The current structure closes it within the 'else' block.
+                // If SyncLocalToS3 was chosen, progressForm.Close() is called before its success message.
+
+                await LoadS3FilesAsync(); // Refresh S3 view
+                LoadLocalFiles(_selectedLocalPath); // Refresh local view
             }
             catch (Exception ex)
             {
+                // Ensure progress form is closed in case of error if it's still open
+                var progressFormInstance = Application.OpenForms.OfType<ProgressForm>().FirstOrDefault();
+                progressFormInstance?.Close();
+
                 MessageBox.Show($"Error during sync: {ex.Message}", "Sync Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            // Removed finally block for progressForm.Close() as it's handled within try or specific logic paths.
         }
 
         private async void ListS3Button_Click(object? sender, EventArgs e)
@@ -425,9 +451,23 @@ namespace S3FileManager
             }
             catch (Exception ex)
             {
+                // Ensure progress form is closed in case of error if it's still open
+                // Check if progressForm variable is accessible and not null before trying to close
+                // For simplicity, accessing Application.OpenForms as a fallback.
+                var openProgressForm = Application.OpenForms.OfType<ProgressForm>().FirstOrDefault(pf => pf.Text == "Syncing files...");
+                if (openProgressForm != null)
+                {
+                    if (openProgressForm.InvokeRequired)
+                        openProgressForm.Invoke(new Action(() => openProgressForm.Close()));
+                    else
+                        openProgressForm.Close();
+                }
+
                 MessageBox.Show($"Error deleting files: {ex.Message}", "Delete Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            // Removed finally block for progressForm.Close() to avoid closing it if already closed.
+            // Refresh operations are now at the end of the try block.
         }
 
         private async void ManagePermissionsButton_Click(object? sender, EventArgs e)
