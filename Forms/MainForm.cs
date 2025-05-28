@@ -200,7 +200,7 @@ namespace S3FileManager
             Task.Run(async () => await LoadS3Files());
         }
 
-        private void BrowseButton_Click(object sender, EventArgs e)
+        private void BrowseButton_Click(object? sender, EventArgs e)
         {
             using (var folderDialog = new FolderBrowserDialog())
             {
@@ -244,7 +244,7 @@ namespace S3FileManager
             }
         }
 
-        private async void UploadButton_Click(object sender, EventArgs e)
+        private async void UploadButton_Click(object? sender, EventArgs e)
         {
             if (_currentUser.Role != UserRole.Administrator)
             {
@@ -305,7 +305,7 @@ namespace S3FileManager
             }
         }
 
-        private async void SyncButton_Click(object sender, EventArgs e)
+        private async void SyncButton_Click(object? sender, EventArgs e)
         {
             if (_currentUser.Role != UserRole.Administrator)
             {
@@ -346,12 +346,12 @@ namespace S3FileManager
             }
         }
 
-        private async void ListS3Button_Click(object sender, EventArgs e)
+        private async void ListS3Button_Click(object? sender, EventArgs e)
         {
             await LoadS3Files();
         }
 
-        private async void RefreshS3Button_Click(object sender, EventArgs e)
+        private async void RefreshS3Button_Click(object? sender, EventArgs e)
         {
             await LoadS3Files();
         }
@@ -389,7 +389,7 @@ namespace S3FileManager
             }
         }
 
-        private async void DownloadButton_Click(object sender, EventArgs e)
+        private async void DownloadButton_Click(object? sender, EventArgs e)
         {
             var s3ListBox = this.Controls.Find("s3ListBox", true).FirstOrDefault() as CheckedListBox;
             if (s3ListBox == null) return;
@@ -445,7 +445,7 @@ namespace S3FileManager
             }
         }
 
-        private async void DeleteButton_Click(object sender, EventArgs e)
+        private async void DeleteButton_Click(object? sender, EventArgs e)
         {
             if (_currentUser.Role != UserRole.Administrator)
             {

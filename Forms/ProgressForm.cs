@@ -5,8 +5,8 @@ namespace S3FileManager
 {
     public class ProgressForm : Form
     {
-        private Label label;
-        private ProgressBar progressBar;
+        private Label label = null!;
+        private ProgressBar progressBar = null!;
 
         public ProgressForm(string message)
         {

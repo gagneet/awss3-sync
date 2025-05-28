@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-// using System.Xml;
 using Newtonsoft.Json;
 using S3FileManager.Models;
 
@@ -13,7 +12,7 @@ namespace S3FileManager.Services
     public class MetadataService
     {
         private readonly string _metadataPath;
-        private Dictionary<string, List<UserRole>> _fileAccessRoles;
+        private Dictionary<string, List<UserRole>> _fileAccessRoles = new Dictionary<string, List<UserRole>>();
 
         public MetadataService()
         {
@@ -29,10 +28,13 @@ namespace S3FileManager.Services
                 {
                     string json = File.ReadAllText(_metadataPath);
                     var data = JsonConvert.DeserializeObject<Dictionary<string, List<string>>>(json);
-                    _fileAccessRoles = data.ToDictionary(
-                        kvp => kvp.Key,
-                        kvp => kvp.Value.Select(r => Enum.Parse<UserRole>(r)).ToList()
-                    );
+                    if (data != null)
+                    {
+                        _fileAccessRoles = data.ToDictionary(
+                            kvp => kvp.Key,
+                            kvp => kvp.Value.Select(r => Enum.Parse<UserRole>(r)).ToList()
+                        );
+                    }
                 }
                 else
                 {

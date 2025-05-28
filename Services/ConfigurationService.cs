@@ -8,7 +8,7 @@ namespace S3FileManager.Services
 {
     public class ConfigurationService
     {
-        private static AppConfig _config;
+        private static AppConfig? _config;
 
         public static AppConfig GetConfiguration()
         {
@@ -16,7 +16,7 @@ namespace S3FileManager.Services
             {
                 LoadConfiguration();
             }
-            return _config;
+            return _config ?? throw new InvalidOperationException("Configuration could not be loaded");
         }
 
         private static void LoadConfiguration()
@@ -30,7 +30,7 @@ namespace S3FileManager.Services
                 }
 
                 string json = File.ReadAllText(configPath);
-                _config = JsonConvert.DeserializeObject<AppConfig>(json);
+                _config = JsonConvert.DeserializeObject<AppConfig>(json) ?? new AppConfig();
             }
             catch (Exception ex)
             {

@@ -11,7 +11,7 @@ namespace S3FileManager.Models
 
     public class User
     {
-        public string Username { get; set; }
+        public string Username { get; set; } = string.Empty;
         public UserRole Role { get; set; }
         public DateTime LastLogin { get; set; }
     }

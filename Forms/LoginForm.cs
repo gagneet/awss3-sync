@@ -7,7 +7,7 @@ namespace S3FileManager
 {
     public partial class LoginForm : Form
     {
-        public User CurrentUser { get; private set; }
+        public User? CurrentUser { get; private set; }
 
         public LoginForm()
         {
@@ -80,14 +80,21 @@ namespace S3FileManager
             this.AcceptButton = loginButton;
         }
 
-        private void LoginButton_Click(object sender, EventArgs e)
+        private void LoginButton_Click(object? sender, EventArgs e)
         {
             var usernameTextBox = this.Controls.Find("usernameTextBox", false)[0] as TextBox;
             var roleComboBox = this.Controls.Find("roleComboBox", false)[0] as ComboBox;
 
-            if (string.IsNullOrWhiteSpace(usernameTextBox.Text))
+            if (usernameTextBox == null || string.IsNullOrWhiteSpace(usernameTextBox.Text))
             {
                 MessageBox.Show("Please enter a username.", "Login Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (roleComboBox?.SelectedItem == null)
+            {
+                MessageBox.Show("Please select a role.", "Login Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -95,7 +102,7 @@ namespace S3FileManager
             CurrentUser = new User
             {
                 Username = usernameTextBox.Text,
-                Role = Enum.Parse<UserRole>(roleComboBox.SelectedItem.ToString()),
+                Role = Enum.Parse<UserRole>(roleComboBox.SelectedItem.ToString() ?? "User"),
                 LastLogin = DateTime.Now
             };
 

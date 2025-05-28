@@ -5,8 +5,8 @@ namespace S3FileManager.Models
 {
     public class LocalFileItem
     {
-        public string Name { get; set; }
-        public string FullPath { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string FullPath { get; set; } = string.Empty;
         public bool IsDirectory { get; set; }
         public long Size { get; set; }
         public List<UserRole> AccessRoles { get; set; } = new List<UserRole>();
@@ -14,7 +14,7 @@ namespace S3FileManager.Models
 
     public class S3FileItem
     {
-        public string Key { get; set; }
+        public string Key { get; set; } = string.Empty;
         public long Size { get; set; }
         public DateTime LastModified { get; set; }
         public List<UserRole> AccessRoles { get; set; } = new List<UserRole>();

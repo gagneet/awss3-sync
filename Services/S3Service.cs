@@ -52,8 +52,8 @@ namespace S3FileManager.Services
                     var item = new S3FileItem
                     {
                         Key = obj.Key,
-                        Size = obj.Size,
-                        LastModified = obj.LastModified,
+                        Size = obj.Size ?? 0,
+                        LastModified = obj.LastModified ?? DateTime.Now,
                         AccessRoles = accessRoles
                     };
 
@@ -65,7 +65,7 @@ namespace S3FileManager.Services
                 }
 
                 request.ContinuationToken = response.NextContinuationToken;
-            } while (response.IsTruncated);
+            } while (response.IsTruncated ?? false);
 
             return FilterFilesForRole(files, userRole);
         }
@@ -170,8 +170,8 @@ namespace S3FileManager.Services
 
             string fullPath = Path.Combine(localPath, fileName);
 
-            string directory = Path.GetDirectoryName(fullPath);
-            if (!Directory.Exists(directory))
+            string? directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
 
             var request = new GetObjectRequest

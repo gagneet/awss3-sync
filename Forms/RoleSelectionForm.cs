@@ -95,17 +95,17 @@ namespace S3FileManager
             this.CancelButton = cancelButton;
         }
 
-        private void OkButton_Click(object sender, EventArgs e)
+        private void OkButton_Click(object? sender, EventArgs e)
         {
             SelectedRoles.Clear();
 
             var userCheckBox = this.Controls.Find("userCheckBox", false)[0] as CheckBox;
             var executiveCheckBox = this.Controls.Find("executiveCheckBox", false)[0] as CheckBox;
 
-            if (userCheckBox.Checked)
+            if (userCheckBox?.Checked == true)
                 SelectedRoles.Add(UserRole.User);
 
-            if (executiveCheckBox.Checked)
+            if (executiveCheckBox?.Checked == true)
                 SelectedRoles.Add(UserRole.Executive);
 
             // Administrator is always included

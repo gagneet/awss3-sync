@@ -2,14 +2,14 @@
 {
     public class AppConfig
     {
-        public AwsConfig AWS { get; set; }
+        public AwsConfig AWS { get; set; } = new AwsConfig();
     }
 
     public class AwsConfig
     {
-        public string AccessKey { get; set; }
-        public string SecretKey { get; set; }
-        public string Region { get; set; }
-        public string BucketName { get; set; }
+        public string AccessKey { get; set; } = string.Empty;
+        public string SecretKey { get; set; } = string.Empty;
+        public string Region { get; set; } = string.Empty;
+        public string BucketName { get; set; } = string.Empty;
     }
 }
