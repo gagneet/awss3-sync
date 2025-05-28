@@ -3,6 +3,7 @@ using System.Collections.Generic; // Required for List<string>
 using System.IO; // Required for Directory, Path
 using System.Linq; // Required for .Any() and .Cast<string>()
 using System.Windows.Forms;
+using Amazon.S3;
 using Amazon.S3.Model; // Added this line
 // No Amazon S3 usings needed here directly if all S3 logic is in S3Service
 // No Microsoft.Extensions.Configuration needed here

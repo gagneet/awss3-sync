@@ -123,6 +123,52 @@ namespace AWSS3Sync.UI // Updated namespace
             }
         }
 
+        private async void btnSyncFolder_Click(object sender, EventArgs e)
+        {
+            if (_s3Service == null) { MessageBox.Show("S3 Service not initialized.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+            if (string.IsNullOrEmpty(selectedFolderPath) || !filesToUpload.Any())
+            {
+                MessageBox.Show("Please select a folder and ensure there are files to sync.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            btnUploadFolder.Enabled = false;
+            btnUploadFile.Enabled = false;
+            btnSyncFolder.Enabled = false;
+
+            try
+            {
+                int days = 60;
+                var objectTags = new List<Tag>();
+                if (this.chkGrantUserRoleAccess.Checked)
+                {
+                    objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleUser });
+                }
+                else
+                {
+                    objectTags.Add(new Tag { Key = AppConstants.AppRoleTagKey, Value = AppConstants.RoleAdmin });
+                }
+
+                // TODO: This call needs S3Service.SyncLocalFilesToS3Async to be updated to accept 'objectTags'
+                // Similar to UploadFolderContentsAsync, this will be handled by modifying the S3Service method later.
+                await _s3Service.SyncLocalFilesToS3Async(filesToUpload, selectedFolderPath, days, objectTags: objectTags);
+                MessageBox.Show("Folder synchronization completed successfully!", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (AmazonS3Exception s3Ex)
+            {
+                MessageBox.Show($"Error during S3 operation: {s3Ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An unexpected error occurred: {ex.Message}", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnUploadFile.Enabled = true;
+                btnSyncFolder.Enabled = true; // Re-enable based on your logic
+            }
+        }
+
         private async void btnUploadFile_Click(object sender, EventArgs e)
         {
             if (_s3Service == null) { MessageBox.Show("S3 Service not initialized.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }

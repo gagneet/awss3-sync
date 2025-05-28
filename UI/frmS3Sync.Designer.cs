@@ -28,206 +28,179 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.btnUploadFile = new System.Windows.Forms.Button();
-            this.btnUploadFolder = new System.Windows.Forms.Button();
-            this.btnBrowseFolder = new System.Windows.Forms.Button();
-            this.btnSyncFolder = new System.Windows.Forms.Button();
-            this.btnListS3Files = new System.Windows.Forms.Button();
-            this.btnDownloadFiles = new System.Windows.Forms.Button();
-            this.btnDeleteFiles = new System.Windows.Forms.Button();
-            this.lblSourceFileName = new System.Windows.Forms.Label();
-            this.lstS3FilesBox = new System.Windows.Forms.ListBox();
-            this.lstLocalFilesBox = new System.Windows.Forms.ListBox();
-            this.picPreview = new System.Windows.Forms.PictureBox();
-            this.chkImagePReview = new System.Windows.Forms.CheckBox();
-            ((System.ComponentModel.ISupportInitialize)(this.picPreview)).BeginInit();
-            this.SuspendLayout();
+            btnUploadFile = new Button();
+            btnUploadFolder = new Button();
+            btnBrowseFolder = new Button();
+            btnSyncFolder = new Button();
+            btnListS3Files = new Button();
+            btnDownloadFiles = new Button();
+            btnDeleteFiles = new Button();
+            lblSourceFileName = new Label();
+            lstS3FilesBox = new ListBox();
+            lstLocalFilesBox = new ListBox();
+            picPreview = new PictureBox();
+            chkImagePReview = new CheckBox();
+            ((System.ComponentModel.ISupportInitialize)picPreview).BeginInit();
+            SuspendLayout();
             // 
             // btnUploadFile
             // 
-            this.btnUploadFile.Location = new System.Drawing.Point(475, 12);
-            this.btnUploadFile.Margin = new System.Windows.Forms.Padding(4);
-            this.btnUploadFile.Name = "btnUploadFile";
-            this.btnUploadFile.Size = new System.Drawing.Size(130, 30);
-            this.btnUploadFile.TabIndex = 0;
-            this.btnUploadFile.Text = "&Browse && Upload";
-            this.btnUploadFile.UseVisualStyleBackColor = true;
-            this.btnUploadFile.Click += new System.EventHandler(this.btnUploadFile_Click);
+            btnUploadFile.Location = new Point(452, 15);
+            btnUploadFile.Margin = new Padding(4, 5, 4, 5);
+            btnUploadFile.Name = "btnUploadFile";
+            btnUploadFile.Size = new Size(139, 38);
+            btnUploadFile.TabIndex = 0;
+            btnUploadFile.Text = "&Browse && Upload";
+            btnUploadFile.UseVisualStyleBackColor = true;
+            btnUploadFile.Click += btnUploadFile_Click;
             // 
             // btnUploadFolder
             // 
-            this.btnUploadFolder.Location = new System.Drawing.Point(770, 12);
-            this.btnUploadFolder.Margin = new System.Windows.Forms.Padding(4);
-            this.btnUploadFolder.Name = "btnUploadFolder";
-            this.btnUploadFolder.Size = new System.Drawing.Size(125, 30);
-            this.btnUploadFolder.TabIndex = 1;
-            this.btnUploadFolder.Text = "Folder &Upload";
-            this.btnUploadFolder.Enabled = false;
-            this.btnUploadFolder.UseVisualStyleBackColor = true;
-            this.btnUploadFolder.Click += new System.EventHandler(this.btnUploadFolder_Click);
+            btnUploadFolder.Enabled = false;
+            btnUploadFolder.Location = new Point(770, 15);
+            btnUploadFolder.Margin = new Padding(4, 5, 4, 5);
+            btnUploadFolder.Name = "btnUploadFolder";
+            btnUploadFolder.Size = new Size(125, 38);
+            btnUploadFolder.TabIndex = 1;
+            btnUploadFolder.Text = "Folder &Upload";
+            btnUploadFolder.UseVisualStyleBackColor = true;
+            btnUploadFolder.Click += btnUploadFolder_Click;
             // 
             // btnBrowseFolder
             // 
-            this.btnBrowseFolder.Location = new System.Drawing.Point(640, 12);
-            this.btnBrowseFolder.Margin = new System.Windows.Forms.Padding(4);
-            this.btnBrowseFolder.Name = "btnBrowseFolder";
-            this.btnBrowseFolder.Size = new System.Drawing.Size(125, 30);
-            this.btnBrowseFolder.TabIndex = 2;
-            this.btnBrowseFolder.Text = "Browse &Folder";
-            this.btnBrowseFolder.UseVisualStyleBackColor = true;
-            this.btnBrowseFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
+            btnBrowseFolder.Location = new Point(640, 15);
+            btnBrowseFolder.Margin = new Padding(4, 5, 4, 5);
+            btnBrowseFolder.Name = "btnBrowseFolder";
+            btnBrowseFolder.Size = new Size(125, 38);
+            btnBrowseFolder.TabIndex = 2;
+            btnBrowseFolder.Text = "Browse &Folder";
+            btnBrowseFolder.UseVisualStyleBackColor = true;
+            btnBrowseFolder.Click += btnSelectFolder_Click;
             // 
             // btnSyncFolder
             // 
-            this.btnSyncFolder.Location = new System.Drawing.Point(900, 12);
-            this.btnSyncFolder.Margin = new System.Windows.Forms.Padding(4);
-            this.btnSyncFolder.Name = "btnSyncFolder";
-            this.btnSyncFolder.Size = new System.Drawing.Size(125, 30);
-            this.btnSyncFolder.TabIndex = 3;
-            this.btnSyncFolder.Text = "&Sync && Upload";
-            this.btnSyncFolder.Enabled = false;
-            this.btnSyncFolder.UseVisualStyleBackColor = true;
-            this.btnSyncFolder.Click += new System.EventHandler(this.btnSyncFolder_Click);
+            btnSyncFolder.Enabled = false;
+            btnSyncFolder.Location = new Point(900, 15);
+            btnSyncFolder.Margin = new Padding(4, 5, 4, 5);
+            btnSyncFolder.Name = "btnSyncFolder";
+            btnSyncFolder.Size = new Size(125, 38);
+            btnSyncFolder.TabIndex = 3;
+            btnSyncFolder.Text = "&Sync && Upload";
+            btnSyncFolder.UseVisualStyleBackColor = true;
+            btnSyncFolder.Click += btnSyncFolder_Click;
             // 
             // btnListS3Files
             // 
-            this.btnListS3Files.Location = new System.Drawing.Point(1265, 730);
-            this.btnListS3Files.Margin = new System.Windows.Forms.Padding(4);
-            this.btnListS3Files.Name = "btnListS3Files";
-            this.btnListS3Files.Size = new System.Drawing.Size(125, 30);
-            this.btnListS3Files.TabIndex = 4;
-            this.btnListS3Files.Text = "&List Files";
-            this.btnListS3Files.UseVisualStyleBackColor = true;
-            this.btnListS3Files.Click += new System.EventHandler(this.btnListS3Files_Click);
+            btnListS3Files.Location = new Point(1265, 912);
+            btnListS3Files.Margin = new Padding(4, 5, 4, 5);
+            btnListS3Files.Name = "btnListS3Files";
+            btnListS3Files.Size = new Size(125, 38);
+            btnListS3Files.TabIndex = 4;
+            btnListS3Files.Text = "&List Files";
+            btnListS3Files.UseVisualStyleBackColor = true;
+            btnListS3Files.Click += btnListS3Files_Click;
             // 
             // btnDownloadFiles
             // 
-            this.btnDownloadFiles.Enabled = false;
-            this.btnDownloadFiles.Location = new System.Drawing.Point(1465, 730);
-            this.btnDownloadFiles.Margin = new System.Windows.Forms.Padding(4);
-            this.btnDownloadFiles.Name = "btnDownloadFiles";
-            this.btnDownloadFiles.Size = new System.Drawing.Size(125, 30);
-            this.btnDownloadFiles.TabIndex = 5;
-            this.btnDownloadFiles.Text = "&Download";
-            this.btnDownloadFiles.UseVisualStyleBackColor = true;
-            this.btnDownloadFiles.Click += new System.EventHandler(this.btnDownloadFiles_Click);
+            btnDownloadFiles.Enabled = false;
+            btnDownloadFiles.Location = new Point(1465, 912);
+            btnDownloadFiles.Margin = new Padding(4, 5, 4, 5);
+            btnDownloadFiles.Name = "btnDownloadFiles";
+            btnDownloadFiles.Size = new Size(125, 38);
+            btnDownloadFiles.TabIndex = 5;
+            btnDownloadFiles.Text = "&Download";
+            btnDownloadFiles.UseVisualStyleBackColor = true;
+            btnDownloadFiles.Click += btnDownloadFiles_Click;
             // 
             // btnDeleteFiles
             // 
-            this.btnDeleteFiles.Location = new System.Drawing.Point(1365, 765);
-            this.btnDeleteFiles.Margin = new System.Windows.Forms.Padding(4);
-            this.btnDeleteFiles.Name = "btnDeleteFiles";
-            this.btnDeleteFiles.Size = new System.Drawing.Size(125, 30);
-            this.btnDeleteFiles.TabIndex = 11;
-            this.btnDeleteFiles.Text = "&Delete Files";
-            this.btnDeleteFiles.Enabled = false;
-            this.btnDeleteFiles.UseVisualStyleBackColor = true;
-            this.btnDeleteFiles.Click += new System.EventHandler(this.btnMoveToBackup_Click);
+            btnDeleteFiles.Enabled = false;
+            btnDeleteFiles.Location = new Point(1365, 956);
+            btnDeleteFiles.Margin = new Padding(4, 5, 4, 5);
+            btnDeleteFiles.Name = "btnDeleteFiles";
+            btnDeleteFiles.Size = new Size(125, 38);
+            btnDeleteFiles.TabIndex = 11;
+            btnDeleteFiles.Text = "&Delete Files";
+            btnDeleteFiles.UseVisualStyleBackColor = true;
+            btnDeleteFiles.Click += btnMoveToBackup_Click;
             // 
             // lblSourceFileName
             // 
-            this.lblSourceFileName.AutoSize = true;
-            this.lblSourceFileName.Location = new System.Drawing.Point(16, 12);
-            this.lblSourceFileName.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            this.lblSourceFileName.Name = "lblSourceFileName";
-            this.lblSourceFileName.Size = new System.Drawing.Size(19, 16);
-            this.lblSourceFileName.TabIndex = 6;
-            this.lblSourceFileName.Text = "---";
+            lblSourceFileName.AutoSize = true;
+            lblSourceFileName.Location = new Point(16, 15);
+            lblSourceFileName.Margin = new Padding(4, 0, 4, 0);
+            lblSourceFileName.Name = "lblSourceFileName";
+            lblSourceFileName.Size = new Size(27, 20);
+            lblSourceFileName.TabIndex = 6;
+            lblSourceFileName.Text = "---";
             // 
             // lstS3FilesBox
             // 
-            this.lstS3FilesBox.FormattingEnabled = true;
-            this.lstS3FilesBox.ItemHeight = 16;
-            this.lstS3FilesBox.Location = new System.Drawing.Point(1032, 48);
-            this.lstS3FilesBox.Margin = new System.Windows.Forms.Padding(4);
-            this.lstS3FilesBox.Name = "lstS3FilesBox";
-            this.lstS3FilesBox.Size = new System.Drawing.Size(724, 660);
-            this.lstS3FilesBox.TabIndex = 7;
-            this.lstS3FilesBox.SelectedIndexChanged += new System.EventHandler(this.lstFiles_SelectedIndexChanged);
+            lstS3FilesBox.FormattingEnabled = true;
+            lstS3FilesBox.Location = new Point(1032, 60);
+            lstS3FilesBox.Margin = new Padding(4, 5, 4, 5);
+            lstS3FilesBox.Name = "lstS3FilesBox";
+            lstS3FilesBox.Size = new Size(724, 824);
+            lstS3FilesBox.TabIndex = 7;
+            lstS3FilesBox.SelectedIndexChanged += lstFiles_SelectedIndexChanged;
             // 
             // lstLocalFilesBox
             // 
-            this.lstLocalFilesBox.FormattingEnabled = true;
-            this.lstLocalFilesBox.ItemHeight = 16;
-            this.lstLocalFilesBox.Location = new System.Drawing.Point(250, 48);
-            this.lstLocalFilesBox.Margin = new System.Windows.Forms.Padding(4);
-            this.lstLocalFilesBox.Name = "lstLocalFilesBox";
-            this.lstLocalFilesBox.Size = new System.Drawing.Size(774, 724);
-            this.lstLocalFilesBox.TabIndex = 8;
+            lstLocalFilesBox.FormattingEnabled = true;
+            lstLocalFilesBox.Location = new Point(250, 60);
+            lstLocalFilesBox.Margin = new Padding(4, 5, 4, 5);
+            lstLocalFilesBox.Name = "lstLocalFilesBox";
+            lstLocalFilesBox.Size = new Size(774, 904);
+            lstLocalFilesBox.TabIndex = 8;
             // 
             // picPreview
             // 
-            this.picPreview.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.picPreview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.picPreview.Location = new System.Drawing.Point(16, 48);
-            this.picPreview.Margin = new System.Windows.Forms.Padding(4);
-            this.picPreview.Name = "picPreview";
-            this.picPreview.Size = new System.Drawing.Size(226, 210);
-            this.picPreview.TabIndex = 10;
-            this.picPreview.TabStop = false;
+            picPreview.BackgroundImageLayout = ImageLayout.Stretch;
+            picPreview.BorderStyle = BorderStyle.FixedSingle;
+            picPreview.Location = new Point(16, 60);
+            picPreview.Margin = new Padding(4, 5, 4, 5);
+            picPreview.Name = "picPreview";
+            picPreview.Size = new Size(226, 262);
+            picPreview.TabIndex = 10;
+            picPreview.TabStop = false;
             // 
             // chkImagePReview
             // 
-            this.chkImagePReview.AutoSize = true;
-            this.chkImagePReview.Checked = true;
-            this.chkImagePReview.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chkImagePReview.Location = new System.Drawing.Point(16, 266);
-            this.chkImagePReview.Margin = new System.Windows.Forms.Padding(4);
-            this.chkImagePReview.Name = "chkImagePReview";
-            this.chkImagePReview.Size = new System.Drawing.Size(118, 20);
-            this.chkImagePReview.TabIndex = 9;
-            this.chkImagePReview.Text = "Image Preview";
-            this.chkImagePReview.UseVisualStyleBackColor = true;
-            // 
-            // chkGrantUserRoleAccess
-            // 
-            this.chkGrantUserRoleAccess.AutoSize = true;
-            this.chkGrantUserRoleAccess.Location = new System.Drawing.Point(475, 50); 
-            this.chkGrantUserRoleAccess.Name = "chkGrantUserRoleAccess";
-            this.chkGrantUserRoleAccess.Size = new System.Drawing.Size(180, 20); // Approximate size
-            this.chkGrantUserRoleAccess.TabIndex = 12; // Ensure this is a unique and sensible TabIndex
-            this.chkGrantUserRoleAccess.Text = "Grant User Role Access";
-            this.chkGrantUserRoleAccess.UseVisualStyleBackColor = true;
-            // 
-            // btnManageRoles
-            // 
-            this.btnManageRoles.Enabled = false; // Initially disabled
-            this.btnManageRoles.Location = new System.Drawing.Point(1600, 730); // Adjust location as needed
-            this.btnManageRoles.Margin = new System.Windows.Forms.Padding(4);
-            this.btnManageRoles.Name = "btnManageRoles";
-            this.btnManageRoles.Size = new System.Drawing.Size(160, 30); // Slightly wider for text
-            this.btnManageRoles.TabIndex = 13; // Ensure unique and sensible TabIndex
-            this.btnManageRoles.Text = "Manage Access Roles";
-            this.btnManageRoles.UseVisualStyleBackColor = true;
-            this.btnManageRoles.Click += new System.EventHandler(this.btnManageRoles_Click);
+            chkImagePReview.AutoSize = true;
+            chkImagePReview.Checked = true;
+            chkImagePReview.CheckState = CheckState.Checked;
+            chkImagePReview.Location = new Point(16, 332);
+            chkImagePReview.Margin = new Padding(4, 5, 4, 5);
+            chkImagePReview.Name = "chkImagePReview";
+            chkImagePReview.Size = new Size(128, 24);
+            chkImagePReview.TabIndex = 9;
+            chkImagePReview.Text = "Image Preview";
+            chkImagePReview.UseVisualStyleBackColor = true;
             // 
             // frmS3Sync
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1800, 850);
-            this.Controls.Add(this.btnManageRoles); // Added here
-            this.Controls.Add(this.chkGrantUserRoleAccess); 
-            this.Controls.Add(this.btnDeleteFiles);
-            this.Controls.Add(this.btnBrowseFolder);
-            this.Controls.Add(this.lstLocalFilesBox);
-            this.Controls.Add(this.btnSyncFolder);
-            this.Controls.Add(this.btnUploadFolder);
-            this.Controls.Add(this.chkImagePReview);
-            this.Controls.Add(this.btnListS3Files);
-            this.Controls.Add(this.lstS3FilesBox);
-            this.Controls.Add(this.lblSourceFileName);
-            this.Controls.Add(this.btnDownloadFiles);
-            this.Controls.Add(this.picPreview);
-            this.Controls.Add(this.btnUploadFile);
-            this.Margin = new System.Windows.Forms.Padding(4);
-            this.Name = "frmS3Sync";
-            this.Text = "AWS S3 Files Sync";
-            this.Load += new System.EventHandler(this.frmS3Access_Load);
-            ((System.ComponentModel.ISupportInitialize)(this.picPreview)).EndInit();
-            this.ResumeLayout(false);
-            this.PerformLayout();
-
+            AutoScaleDimensions = new SizeF(8F, 20F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(1800, 1062);
+            Controls.Add(btnDeleteFiles);
+            Controls.Add(btnBrowseFolder);
+            Controls.Add(lstLocalFilesBox);
+            Controls.Add(btnSyncFolder);
+            Controls.Add(btnUploadFolder);
+            Controls.Add(chkImagePReview);
+            Controls.Add(btnListS3Files);
+            Controls.Add(lstS3FilesBox);
+            Controls.Add(lblSourceFileName);
+            Controls.Add(btnDownloadFiles);
+            Controls.Add(picPreview);
+            Controls.Add(btnUploadFile);
+            Margin = new Padding(4, 5, 4, 5);
+            Name = "frmS3Sync";
+            Text = "AWS S3 Files Sync";
+            Load += frmS3Access_Load;
+            ((System.ComponentModel.ISupportInitialize)picPreview).EndInit();
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
@@ -239,6 +212,7 @@
         private System.Windows.Forms.Button btnListS3Files;
         private System.Windows.Forms.Button btnDownloadFiles;
         private System.Windows.Forms.Button btnDeleteFiles;
+        private System.Windows.Forms.Button btnMoveToBackup;
         private System.Windows.Forms.ListBox lstS3FilesBox;
         private System.Windows.Forms.ListBox lstLocalFilesBox;
         private System.Windows.Forms.Label lblSourceFileName;
