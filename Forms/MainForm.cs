@@ -1,4 +1,4 @@
-﻿// Forms/MainForm.cs
+﻿// Forms/MainForm.cs - Optimized Version
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -20,6 +20,13 @@ namespace S3FileManager
         private List<LocalFileItem> _localFiles = new List<LocalFileItem>();
         private List<S3FileItem> _s3Files = new List<S3FileItem>();
 
+        // Performance optimization: Cache and selection tracking
+        private readonly Dictionary<string, bool> _s3CheckedItems = new Dictionary<string, bool>();
+        private readonly Dictionary<string, bool> _localCheckedItems = new Dictionary<string, bool>();
+        private bool _isUpdatingTree = false;
+        private TreeNode? _lastSelectedS3Node = null;
+        private TreeNode? _lastSelectedLocalNode = null;
+
         public MainForm(User currentUser)
         {
             _currentUser = currentUser;
@@ -27,121 +34,6 @@ namespace S3FileManager
             _fileService = new FileService();
             InitializeComponent();
             SetupUserInterface();
-        }
-
-        // Executive Upload Folder Selection Form
-        public class ExecutiveUploadFolderForm : Form
-        {
-            public string SelectedFolder { get; private set; } = "";
-            private readonly string[] _allowedFolders = { "executive-committee", "reports", "shared-documents" };
-
-            public ExecutiveUploadFolderForm()
-            {
-                InitializeComponent();
-                PopulateFolders();
-            }
-
-            private void InitializeComponent()
-            {
-                this.Size = new Size(400, 300);
-                this.Text = "Select Upload Destination";
-                this.StartPosition = FormStartPosition.CenterParent;
-                this.FormBorderStyle = FormBorderStyle.FixedDialog;
-                this.MaximizeBox = false;
-                this.MinimizeBox = false;
-
-                var titleLabel = new Label
-                {
-                    Text = "Executive Upload Permissions",
-                    Font = new Font("Arial", 12, FontStyle.Bold),
-                    Location = new Point(20, 20),
-                    Size = new Size(350, 30),
-                    TextAlign = ContentAlignment.MiddleCenter
-                };
-
-                var instructionLabel = new Label
-                {
-                    Text = "As an Executive, you can upload files to the following folders:",
-                    Location = new Point(20, 60),
-                    Size = new Size(350, 40)
-                };
-
-                var foldersListBox = new ListBox
-                {
-                    Location = new Point(20, 110),
-                    Size = new Size(350, 100),
-                    Name = "foldersListBox"
-                };
-
-                var noteLabel = new Label
-                {
-                    Text = "Note: Files uploaded will be accessible to Executives and Administrators.",
-                    ForeColor = Color.Gray,
-                    Location = new Point(20, 220),
-                    Size = new Size(350, 30)
-                };
-
-                var uploadButton = new Button
-                {
-                    Text = "Upload Here",
-                    Location = new Point(230, 250),
-                    Size = new Size(90, 30),
-                    DialogResult = DialogResult.OK,
-                    Enabled = false,
-                    Name = "uploadButton"
-                };
-                uploadButton.Click += UploadButton_Click;
-
-                var cancelButton = new Button
-                {
-                    Text = "Cancel",
-                    Location = new Point(330, 250),
-                    Size = new Size(70, 30),
-                    DialogResult = DialogResult.Cancel
-                };
-
-                foldersListBox.SelectedIndexChanged += FoldersListBox_SelectedIndexChanged;
-
-                this.Controls.AddRange(new Control[]
-                {
-                titleLabel, instructionLabel, foldersListBox, noteLabel,
-                uploadButton, cancelButton
-                });
-
-                this.AcceptButton = uploadButton;
-                this.CancelButton = cancelButton;
-            }
-
-            private void PopulateFolders()
-            {
-                var foldersListBox = this.Controls.Find("foldersListBox", false)[0] as ListBox;
-                if (foldersListBox == null) return;
-
-                foreach (var folder in _allowedFolders)
-                {
-                    foldersListBox.Items.Add($"📁 {folder}");
-                }
-            }
-
-            private void FoldersListBox_SelectedIndexChanged(object? sender, EventArgs e)
-            {
-                var listBox = sender as ListBox;
-                var uploadButton = this.Controls.Find("uploadButton", false)[0] as Button;
-
-                if (listBox != null && uploadButton != null)
-                {
-                    uploadButton.Enabled = listBox.SelectedIndex >= 0;
-                }
-            }
-
-            private void UploadButton_Click(object? sender, EventArgs e)
-            {
-                var foldersListBox = this.Controls.Find("foldersListBox", false)[0] as ListBox;
-                if (foldersListBox != null && foldersListBox.SelectedIndex >= 0)
-                {
-                    SelectedFolder = _allowedFolders[foldersListBox.SelectedIndex];
-                }
-            }
         }
 
         private void InitializeComponent()
@@ -203,9 +95,16 @@ namespace S3FileManager
                 ShowLines = true,
                 ShowPlusMinus = true,
                 ShowRootLines = true,
-                HideSelection = false
+                HideSelection = false,
+                // Performance optimizations
+                BeginUpdate = true,
+                Scrollable = true
             };
+
+            // Event handlers for performance and selection persistence
             localTreeView.BeforeExpand += LocalTreeView_BeforeExpand;
+            localTreeView.AfterCheck += LocalTreeView_AfterCheck;
+            localTreeView.BeforeCheck += LocalTreeView_BeforeCheck;
 
             var buttonY = 530;
             var browseButton = new Button
@@ -234,10 +133,20 @@ namespace S3FileManager
             };
             syncButton.Click += SyncButton_Click;
 
+            // Selection counter
+            var selectionLabel = new Label
+            {
+                Text = "Selected: 0 items",
+                Location = new Point(400, buttonY + 5),
+                Size = new Size(150, 20),
+                Name = "localSelectionLabel",
+                ForeColor = Color.Blue
+            };
+
             panel.Controls.AddRange(new Control[]
             {
                 headerLabel, pathLabel, localTreeView,
-                browseButton, uploadButton, syncButton
+                browseButton, uploadButton, syncButton, selectionLabel
             });
 
             return panel;
@@ -272,8 +181,19 @@ namespace S3FileManager
                 ShowLines = true,
                 ShowPlusMinus = true,
                 ShowRootLines = true,
-                HideSelection = false
+                HideSelection = false,
+                // Performance optimizations
+                BeginUpdate = true,
+                Scrollable = true,
+                // Virtual mode for large datasets
+                VirtualMode = false // We'll implement custom virtualization
             };
+
+            // Event handlers for performance and selection persistence
+            s3TreeView.AfterCheck += S3TreeView_AfterCheck;
+            s3TreeView.BeforeCheck += S3TreeView_BeforeCheck;
+            s3TreeView.BeforeExpand += S3TreeView_BeforeExpand;
+            s3TreeView.AfterExpand += S3TreeView_AfterExpand;
 
             var buttonY = 530;
             var listButton = new Button
@@ -319,10 +239,45 @@ namespace S3FileManager
             };
             refreshButton.Click += RefreshS3Button_Click;
 
+            // Selection counter and search
+            var selectionLabel = new Label
+            {
+                Text = "Selected: 0 items",
+                Location = new Point(10, buttonY + 35),
+                Size = new Size(150, 20),
+                Name = "s3SelectionLabel",
+                ForeColor = Color.Blue
+            };
+
+            var searchLabel = new Label
+            {
+                Text = "Search:",
+                Location = new Point(200, buttonY + 35),
+                Size = new Size(50, 20)
+            };
+
+            var searchTextBox = new TextBox
+            {
+                Location = new Point(250, buttonY + 33),
+                Size = new Size(150, 20),
+                Name = "searchTextBox",
+                PlaceholderText = "Filter files..."
+            };
+            searchTextBox.TextChanged += SearchTextBox_TextChanged;
+
+            var clearSearchButton = new Button
+            {
+                Text = "Clear",
+                Location = new Point(410, buttonY + 31),
+                Size = new Size(50, 24)
+            };
+            clearSearchButton.Click += ClearSearchButton_Click;
+
             panel.Controls.AddRange(new Control[]
             {
                 headerLabel, bucketLabel, s3TreeView,
-                listButton, downloadButton, deleteButton, permissionsButton, refreshButton
+                listButton, downloadButton, deleteButton, permissionsButton, refreshButton,
+                selectionLabel, searchLabel, searchTextBox, clearSearchButton
             });
 
             return panel;
@@ -343,12 +298,12 @@ namespace S3FileManager
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
-            // Load S3 files on startup
+            // Load S3 files on startup asynchronously
             Task.Run(async () =>
             {
                 try
                 {
-                    await LoadS3Files();
+                    await LoadS3FilesAsync();
                 }
                 catch (Exception ex)
                 {
@@ -360,6 +315,272 @@ namespace S3FileManager
                 }
             });
         }
+
+        #region Selection Persistence and Performance Optimization
+
+        private void LocalTreeView_BeforeCheck(object? sender, TreeViewCancelEventArgs e)
+        {
+            if (_isUpdatingTree || e.Node?.Tag == null) return;
+
+            var item = e.Node.Tag as LocalFileItem;
+            if (item != null)
+            {
+                _localCheckedItems[item.FullPath] = !e.Node.Checked;
+            }
+        }
+
+        private void LocalTreeView_AfterCheck(object? sender, TreeViewEventArgs e)
+        {
+            if (_isUpdatingTree || e.Node?.Tag == null) return;
+
+            var item = e.Node.Tag as LocalFileItem;
+            if (item != null)
+            {
+                _localCheckedItems[item.FullPath] = e.Node.Checked;
+                UpdateLocalSelectionCount();
+
+                // Auto-check/uncheck children for folders
+                if (item.IsDirectory)
+                {
+                    _isUpdatingTree = true;
+                    SetChildrenChecked(e.Node, e.Node.Checked);
+                    _isUpdatingTree = false;
+                }
+            }
+        }
+
+        private void S3TreeView_BeforeCheck(object? sender, TreeViewCancelEventArgs e)
+        {
+            if (_isUpdatingTree || e.Node?.Tag == null) return;
+
+            var item = e.Node.Tag as S3FileItem;
+            if (item != null)
+            {
+                _s3CheckedItems[item.Key] = !e.Node.Checked;
+            }
+        }
+
+        private void S3TreeView_AfterCheck(object? sender, TreeViewEventArgs e)
+        {
+            if (_isUpdatingTree || e.Node?.Tag == null) return;
+
+            var item = e.Node.Tag as S3FileItem;
+            if (item != null)
+            {
+                _s3CheckedItems[item.Key] = e.Node.Checked;
+                UpdateS3SelectionCount();
+
+                // Auto-check/uncheck children for folders
+                if (item.IsDirectory)
+                {
+                    _isUpdatingTree = true;
+                    SetChildrenChecked(e.Node, e.Node.Checked);
+                    _isUpdatingTree = false;
+                }
+            }
+        }
+
+        private void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
+        {
+            // Performance: Only expand if not already loaded
+            if (e.Node != null && e.Node.Nodes.Count == 1 && e.Node.Nodes[0].Text == "Loading...")
+            {
+                // This would be implemented for lazy loading of S3 subfolders if needed
+            }
+        }
+
+        private void S3TreeView_AfterExpand(object? sender, TreeViewEventArgs e)
+        {
+            // Restore checked states after expansion
+            if (e.Node != null)
+            {
+                RestoreCheckedStates(e.Node.Nodes, _s3CheckedItems, true);
+            }
+        }
+
+        private void SetChildrenChecked(TreeNode parentNode, bool isChecked)
+        {
+            foreach (TreeNode childNode in parentNode.Nodes)
+            {
+                childNode.Checked = isChecked;
+
+                // Update the tracking dictionary
+                if (childNode.Tag is LocalFileItem localItem)
+                {
+                    _localCheckedItems[localItem.FullPath] = isChecked;
+                }
+                else if (childNode.Tag is S3FileItem s3Item)
+                {
+                    _s3CheckedItems[s3Item.Key] = isChecked;
+                }
+
+                // Recursively check children
+                if (childNode.Nodes.Count > 0)
+                {
+                    SetChildrenChecked(childNode, isChecked);
+                }
+            }
+        }
+
+        private void RestoreCheckedStates(TreeNodeCollection nodes, Dictionary<string, bool> checkedItems, bool isS3)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                string key = "";
+                if (isS3 && node.Tag is S3FileItem s3Item)
+                {
+                    key = s3Item.Key;
+                }
+                else if (!isS3 && node.Tag is LocalFileItem localItem)
+                {
+                    key = localItem.FullPath;
+                }
+
+                if (!string.IsNullOrEmpty(key) && checkedItems.ContainsKey(key))
+                {
+                    node.Checked = checkedItems[key];
+                }
+
+                // Recursively restore for children
+                if (node.Nodes.Count > 0)
+                {
+                    RestoreCheckedStates(node.Nodes, checkedItems, isS3);
+                }
+            }
+        }
+
+        private void UpdateLocalSelectionCount()
+        {
+            var count = _localCheckedItems.Values.Count(v => v);
+            var label = this.Controls.Find("localSelectionLabel", true).FirstOrDefault() as Label;
+            if (label != null)
+            {
+                label.Text = $"Selected: {count} items";
+            }
+        }
+
+        private void UpdateS3SelectionCount()
+        {
+            var count = _s3CheckedItems.Values.Count(v => v);
+            var label = this.Controls.Find("s3SelectionLabel", true).FirstOrDefault() as Label;
+            if (label != null)
+            {
+                label.Text = $"Selected: {count} items";
+            }
+        }
+
+        #endregion
+
+        #region Search and Filter
+
+        private void SearchTextBox_TextChanged(object? sender, EventArgs e)
+        {
+            var textBox = sender as TextBox;
+            if (textBox == null) return;
+
+            var searchTerm = textBox.Text.ToLowerInvariant();
+            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+            if (s3TreeView == null) return;
+
+            // Perform search with debouncing
+            Task.Delay(300).ContinueWith(_ =>
+            {
+                if (textBox.Text.ToLowerInvariant() == searchTerm) // Only proceed if text hasn't changed
+                {
+                    this.Invoke(new Action(() => FilterS3Tree(searchTerm)));
+                }
+            });
+        }
+
+        private void ClearSearchButton_Click(object? sender, EventArgs e)
+        {
+            var searchTextBox = this.Controls.Find("searchTextBox", true).FirstOrDefault() as TextBox;
+            if (searchTextBox != null)
+            {
+                searchTextBox.Text = "";
+                FilterS3Tree("");
+            }
+        }
+
+        private void FilterS3Tree(string searchTerm)
+        {
+            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+            if (s3TreeView == null) return;
+
+            _isUpdatingTree = true;
+            s3TreeView.BeginUpdate();
+
+            try
+            {
+                if (string.IsNullOrEmpty(searchTerm))
+                {
+                    // Show all nodes
+                    ShowAllNodes(s3TreeView.Nodes);
+                }
+                else
+                {
+                    // Hide nodes that don't match search
+                    FilterNodes(s3TreeView.Nodes, searchTerm);
+                }
+
+                // Restore checked states after filtering
+                RestoreCheckedStates(s3TreeView.Nodes, _s3CheckedItems, true);
+            }
+            finally
+            {
+                s3TreeView.EndUpdate();
+                _isUpdatingTree = false;
+            }
+        }
+
+        private bool FilterNodes(TreeNodeCollection nodes, string searchTerm)
+        {
+            bool hasVisibleChildren = false;
+
+            foreach (TreeNode node in nodes)
+            {
+                bool nodeMatches = node.Text.ToLowerInvariant().Contains(searchTerm);
+                bool hasMatchingChildren = node.Nodes.Count > 0 && FilterNodes(node.Nodes, searchTerm);
+
+                bool shouldShow = nodeMatches || hasMatchingChildren;
+
+                // Show/hide the node
+                if (shouldShow)
+                {
+                    node.BackColor = nodeMatches ? Color.LightYellow : Color.Transparent;
+                    node.ForeColor = Color.Black;
+                    hasVisibleChildren = true;
+
+                    if (hasMatchingChildren)
+                    {
+                        node.Expand();
+                    }
+                }
+                else
+                {
+                    node.BackColor = Color.Transparent;
+                    node.ForeColor = Color.LightGray;
+                }
+            }
+
+            return hasVisibleChildren;
+        }
+
+        private void ShowAllNodes(TreeNodeCollection nodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                node.BackColor = Color.Transparent;
+                node.ForeColor = Color.Black;
+
+                if (node.Nodes.Count > 0)
+                {
+                    ShowAllNodes(node.Nodes);
+                }
+            }
+        }
+
+        #endregion
 
         #region Local File Operations
 
@@ -388,6 +609,12 @@ namespace S3FileManager
                 var localTreeView = this.Controls.Find("localTreeView", true).FirstOrDefault() as TreeView;
                 if (localTreeView == null) return;
 
+                _isUpdatingTree = true;
+                localTreeView.BeginUpdate();
+
+                // Clear previous selections for this path
+                _localCheckedItems.Clear();
+
                 localTreeView.Nodes.Clear();
 
                 // Create root node for the selected folder
@@ -407,9 +634,15 @@ namespace S3FileManager
 
                 localTreeView.Nodes.Add(rootNode);
                 rootNode.Expand();
+
+                localTreeView.EndUpdate();
+                _isUpdatingTree = false;
+
+                UpdateLocalSelectionCount();
             }
             catch (Exception ex)
             {
+                _isUpdatingTree = false;
                 MessageBox.Show($"Error loading local files: {ex.Message}", "Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -482,25 +715,73 @@ namespace S3FileManager
                 // Check if this is a dummy expansion (has only one "Loading..." node)
                 if (node.Nodes.Count == 1 && node.Nodes[0].Text == "Loading...")
                 {
+                    _isUpdatingTree = true;
+
+                    var treeView = sender as TreeView;
+                    treeView?.BeginUpdate();
+
                     node.Nodes.Clear();
                     LoadLocalDirectoryNodes(node, item.FullPath);
+
+                    // Restore checked states after expansion
+                    RestoreCheckedStates(node.Nodes, _localCheckedItems, false);
+
+                    treeView?.EndUpdate();
+                    _isUpdatingTree = false;
                 }
             }
         }
 
-        private List<LocalFileItem> GetCheckedLocalItems(TreeNodeCollection nodes)
+        private List<LocalFileItem> GetCheckedLocalItems()
         {
             var items = new List<LocalFileItem>();
 
-            foreach (TreeNode node in nodes)
+            foreach (var kvp in _localCheckedItems)
             {
-                if (node.Checked && node.Tag is LocalFileItem item)
+                if (kvp.Value) // If checked
                 {
-                    items.Add(item);
+                    var item = _localFiles.FirstOrDefault(f => f.FullPath == kvp.Key);
+                    if (item != null)
+                    {
+                        items.Add(item);
+                    }
+                    else
+                    {
+                        // Create item from path if not in cache
+                        try
+                        {
+                            var info = new FileInfo(kvp.Key);
+                            if (info.Exists)
+                            {
+                                items.Add(new LocalFileItem
+                                {
+                                    Name = info.Name,
+                                    FullPath = kvp.Key,
+                                    IsDirectory = false,
+                                    Size = info.Length
+                                });
+                            }
+                            else
+                            {
+                                var dirInfo = new DirectoryInfo(kvp.Key);
+                                if (dirInfo.Exists)
+                                {
+                                    items.Add(new LocalFileItem
+                                    {
+                                        Name = dirInfo.Name,
+                                        FullPath = kvp.Key,
+                                        IsDirectory = true,
+                                        Size = 0
+                                    });
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Skip invalid paths
+                        }
+                    }
                 }
-
-                // Recursively check child nodes
-                items.AddRange(GetCheckedLocalItems(node.Nodes));
             }
 
             return items;
@@ -519,10 +800,7 @@ namespace S3FileManager
                 return;
             }
 
-            var localTreeView = this.Controls.Find("localTreeView", true).FirstOrDefault() as TreeView;
-            if (localTreeView == null) return;
-
-            var selectedItems = GetCheckedLocalItems(localTreeView.Nodes);
+            var selectedItems = GetCheckedLocalItems();
 
             if (selectedItems.Count == 0)
             {
@@ -559,9 +837,10 @@ namespace S3FileManager
                 var progressForm = new ProgressForm("Uploading files...");
                 progressForm.Show();
 
-                foreach (var item in selectedItems)
+                for (int i = 0; i < selectedItems.Count; i++)
                 {
-                    progressForm.UpdateMessage($"Uploading: {item.Name}");
+                    var item = selectedItems[i];
+                    progressForm.UpdateMessage($"Uploading: {item.Name} ({i + 1}/{selectedItems.Count})");
 
                     string uploadKey = string.IsNullOrEmpty(uploadPrefix) ? item.Name : $"{uploadPrefix}/{item.Name}";
 
@@ -576,10 +855,10 @@ namespace S3FileManager
                 }
 
                 progressForm.Close();
-                MessageBox.Show("Upload completed successfully!", "Success",
+                MessageBox.Show($"Upload completed successfully! ({selectedItems.Count} items)", "Success",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                await LoadS3Files();
+                await LoadS3FilesAsync();
             }
             catch (Exception ex)
             {
@@ -620,7 +899,7 @@ namespace S3FileManager
                 MessageBox.Show("Sync completed successfully!", "Success",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                await LoadS3Files();
+                await LoadS3FilesAsync();
             }
             catch (Exception ex)
             {
@@ -631,77 +910,111 @@ namespace S3FileManager
 
         #endregion
 
-        #region S3 Operations
+        #region S3 Operations - Optimized
 
         private async void ListS3Button_Click(object? sender, EventArgs e)
         {
-            await LoadS3Files();
+            await LoadS3FilesAsync();
         }
 
         private async void RefreshS3Button_Click(object? sender, EventArgs e)
         {
-            await LoadS3Files();
+            // Clear search before refresh
+            var searchTextBox = this.Controls.Find("searchTextBox", true).FirstOrDefault() as TextBox;
+            if (searchTextBox != null)
+                searchTextBox.Text = "";
+
+            await LoadS3FilesAsync();
         }
 
-        private async Task LoadS3Files()
+        private async Task LoadS3FilesAsync()
         {
             try
             {
+                // Show loading indicator
+                var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
+                if (bucketLabel != null)
+                {
+                    this.Invoke(new Action(() => bucketLabel.Text = "Loading..."));
+                }
+
                 _s3Files = await _s3Service.ListFilesAsync(_currentUser.Role);
 
                 // Update UI on main thread
-                if (this.InvokeRequired)
-                {
-                    this.Invoke(new Action(() => UpdateS3TreeView()));
-                }
-                else
-                {
-                    UpdateS3TreeView();
-                }
+                this.Invoke(new Action(() => UpdateS3TreeViewOptimized()));
             }
             catch (Exception ex)
             {
-                var action = new Action(() =>
+                this.Invoke(new Action(() =>
                 {
                     MessageBox.Show($"Error loading S3 files: {ex.Message}", "S3 Error",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
-                });
 
-                if (this.InvokeRequired)
-                    this.Invoke(action);
-                else
-                    action();
+                    var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
+                    if (bucketLabel != null)
+                        bucketLabel.Text = "Error loading bucket";
+                }));
             }
         }
 
-        private void UpdateS3TreeView()
+        private void UpdateS3TreeViewOptimized()
         {
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
             if (s3TreeView == null) return;
 
-            s3TreeView.Nodes.Clear();
+            _isUpdatingTree = true;
+            s3TreeView.BeginUpdate();
 
-            // Create hierarchical structure from flat S3 file list
-            var rootNodes = new Dictionary<string, TreeNode>();
-
-            foreach (var item in _s3Files)
+            try
             {
-                AddS3ItemToTree(s3TreeView, rootNodes, item);
+                // Store current expanded states and scroll position
+                var expandedNodes = new HashSet<string>();
+                var scrollPosition = GetTreeViewScrollPosition(s3TreeView);
+                StoreExpandedStates(s3TreeView.Nodes, expandedNodes);
+
+                s3TreeView.Nodes.Clear();
+
+                // Build tree structure efficiently
+                var nodeCache = new Dictionary<string, TreeNode>();
+
+                // Sort files for better performance
+                var sortedFiles = _s3Files.OrderBy(f => f.Key).ToList();
+
+                foreach (var item in sortedFiles)
+                {
+                    AddS3ItemToTreeOptimized(s3TreeView, nodeCache, item);
+                }
+
+                // Restore expanded states
+                RestoreExpandedStates(s3TreeView.Nodes, expandedNodes);
+
+                // Restore checked states
+                RestoreCheckedStates(s3TreeView.Nodes, _s3CheckedItems, true);
+
+                // Restore scroll position
+                SetTreeViewScrollPosition(s3TreeView, scrollPosition);
+
+                // Update UI labels
+                var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
+                if (bucketLabel != null)
+                {
+                    var config = ConfigurationService.GetConfiguration();
+                    bucketLabel.Text = $"Bucket: {config.AWS.BucketName} ({_s3Files.Count} items visible)";
+                }
+
+                UpdateS3SelectionCount();
             }
-
-            var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
-            if (bucketLabel != null)
+            finally
             {
-                var config = ConfigurationService.GetConfiguration();
-                bucketLabel.Text = $"Bucket: {config.AWS.BucketName} ({_s3Files.Count} items visible)";
+                s3TreeView.EndUpdate();
+                _isUpdatingTree = false;
             }
         }
 
-        private void AddS3ItemToTree(TreeView treeView, Dictionary<string, TreeNode> rootNodes, S3FileItem item)
+        private void AddS3ItemToTreeOptimized(TreeView treeView, Dictionary<string, TreeNode> nodeCache, S3FileItem item)
         {
             var pathParts = item.Key.Split('/');
             TreeNodeCollection currentNodes = treeView.Nodes;
-            TreeNode? parentNode = null;
             string currentPath = "";
 
             for (int i = 0; i < pathParts.Length; i++)
@@ -713,15 +1026,24 @@ namespace S3FileManager
                 bool isLastPart = i == pathParts.Length - 1;
                 bool isFile = isLastPart && !item.IsDirectory;
 
-                // Look for existing node
+                // Check cache first for performance
                 TreeNode? existingNode = null;
-                foreach (TreeNode node in currentNodes)
+                if (nodeCache.ContainsKey(currentPath))
                 {
-                    if (node.Tag is S3FileItem nodeItem &&
-                        (nodeItem.Key == currentPath || nodeItem.Key == currentPath + "/"))
+                    existingNode = nodeCache[currentPath];
+                }
+                else
+                {
+                    // Look for existing node in current level only
+                    foreach (TreeNode node in currentNodes)
                     {
-                        existingNode = node;
-                        break;
+                        if (node.Tag is S3FileItem nodeItem &&
+                            (nodeItem.Key == currentPath || nodeItem.Key == currentPath + "/"))
+                        {
+                            existingNode = node;
+                            nodeCache[currentPath] = node;
+                            break;
+                        }
                     }
                 }
 
@@ -742,34 +1064,98 @@ namespace S3FileManager
 
                     var newNode = new TreeNode(displayText)
                     {
-                        Tag = nodeItem
+                        Tag = nodeItem,
+                        Name = currentPath // Set name for easier searching
                     };
 
                     currentNodes.Add(newNode);
+                    nodeCache[currentPath] = newNode;
                     existingNode = newNode;
                 }
 
                 if (!isLastPart)
                 {
                     currentNodes = existingNode.Nodes;
-                    parentNode = existingNode;
                 }
             }
         }
 
-        private List<S3FileItem> GetCheckedS3Items(TreeNodeCollection nodes)
+        private void StoreExpandedStates(TreeNodeCollection nodes, HashSet<string> expandedNodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                if (node.IsExpanded && node.Tag is S3FileItem item)
+                {
+                    expandedNodes.Add(item.Key);
+                }
+
+                if (node.Nodes.Count > 0)
+                {
+                    StoreExpandedStates(node.Nodes, expandedNodes);
+                }
+            }
+        }
+
+        private void RestoreExpandedStates(TreeNodeCollection nodes, HashSet<string> expandedNodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                if (node.Tag is S3FileItem item && expandedNodes.Contains(item.Key))
+                {
+                    node.Expand();
+                }
+
+                if (node.Nodes.Count > 0)
+                {
+                    RestoreExpandedStates(node.Nodes, expandedNodes);
+                }
+            }
+        }
+
+        private int GetTreeViewScrollPosition(TreeView treeView)
+        {
+            try
+            {
+                return SendMessage(treeView.Handle, TVM_GETSCROLLPOS, 0, 0);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private void SetTreeViewScrollPosition(TreeView treeView, int position)
+        {
+            try
+            {
+                SendMessage(treeView.Handle, TVM_SETSCROLLPOS, 0, position);
+            }
+            catch
+            {
+                // Ignore if unable to set scroll position
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+        private const int TVM_SETSCROLLPOS = 0x1100 + 63;
+        private const int TVM_GETSCROLLPOS = 0x1100 + 62;
+
+        private List<S3FileItem> GetCheckedS3Items()
         {
             var items = new List<S3FileItem>();
 
-            foreach (TreeNode node in nodes)
+            foreach (var kvp in _s3CheckedItems)
             {
-                if (node.Checked && node.Tag is S3FileItem item)
+                if (kvp.Value) // If checked
                 {
-                    items.Add(item);
+                    var item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
+                    if (item != null)
+                    {
+                        items.Add(item);
+                    }
                 }
-
-                // Recursively check child nodes
-                items.AddRange(GetCheckedS3Items(node.Nodes));
             }
 
             return items;
@@ -777,10 +1163,7 @@ namespace S3FileManager
 
         private async void DownloadButton_Click(object? sender, EventArgs e)
         {
-            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
-            if (s3TreeView == null) return;
-
-            var selectedItems = GetCheckedS3Items(s3TreeView.Nodes);
+            var selectedItems = GetCheckedS3Items();
 
             if (selectedItems.Count == 0)
             {
@@ -839,10 +1222,7 @@ namespace S3FileManager
                 return;
             }
 
-            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
-            if (s3TreeView == null) return;
-
-            var selectedItems = GetCheckedS3Items(s3TreeView.Nodes);
+            var selectedItems = GetCheckedS3Items();
 
             if (selectedItems.Count == 0)
             {
@@ -866,13 +1246,16 @@ namespace S3FileManager
                     var item = selectedItems[i];
                     progressForm.UpdateMessage($"Deleting: {item.Key} ({i + 1}/{selectedItems.Count})");
                     await _s3Service.DeleteFileAsync(item.Key);
+
+                    // Remove from checked items
+                    _s3CheckedItems.Remove(item.Key);
                 }
 
                 progressForm.Close();
                 MessageBox.Show($"Deleted {selectedItems.Count} items successfully!", "Success",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                await LoadS3Files();
+                await LoadS3FilesAsync();
             }
             catch (Exception ex)
             {
@@ -890,10 +1273,7 @@ namespace S3FileManager
                 return;
             }
 
-            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
-            if (s3TreeView == null) return;
-
-            var selectedItems = GetCheckedS3Items(s3TreeView.Nodes);
+            var selectedItems = GetCheckedS3Items();
 
             if (selectedItems.Count == 0)
             {
@@ -930,7 +1310,7 @@ namespace S3FileManager
                     MessageBox.Show($"Updated permissions for {selectedItems.Count} items successfully!", "Success",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                    await LoadS3Files();
+                    await LoadS3FilesAsync();
                 }
                 catch (Exception ex)
                 {
@@ -960,6 +1340,8 @@ namespace S3FileManager
         }
     }
 
+    #region Supporting Forms (same as before but optimized)
+
     // Enhanced Delete Confirmation Form
     public class DeleteConfirmationForm : Form
     {
@@ -980,7 +1362,7 @@ namespace S3FileManager
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.BackColor = Color.FromArgb(255, 248, 248); // Light red background
+            this.BackColor = Color.FromArgb(255, 248, 248);
 
             var warningLabel = new Label
             {
@@ -1255,8 +1637,124 @@ namespace S3FileManager
             if (executiveCheckBox?.Checked == true)
                 SelectedRoles.Add(UserRole.Executive);
 
-            // Administrator is always included
             SelectedRoles.Add(UserRole.Administrator);
         }
     }
+
+    // Executive Upload Folder Selection Form
+    public class ExecutiveUploadFolderForm : Form
+    {
+        public string SelectedFolder { get; private set; } = "";
+        private readonly string[] _allowedFolders = { "executive-committee", "reports", "shared-documents" };
+
+        public ExecutiveUploadFolderForm()
+        {
+            InitializeComponent();
+            PopulateFolders();
+        }
+
+        private void InitializeComponent()
+        {
+            this.Size = new Size(400, 300);
+            this.Text = "Select Upload Destination";
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+
+            var titleLabel = new Label
+            {
+                Text = "Executive Upload Permissions",
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                Location = new Point(20, 20),
+                Size = new Size(350, 30),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            var instructionLabel = new Label
+            {
+                Text = "As an Executive, you can upload files to the following folders:",
+                Location = new Point(20, 60),
+                Size = new Size(350, 40)
+            };
+
+            var foldersListBox = new ListBox
+            {
+                Location = new Point(20, 110),
+                Size = new Size(350, 100),
+                Name = "foldersListBox"
+            };
+
+            var noteLabel = new Label
+            {
+                Text = "Note: Files uploaded will be accessible to Executives and Administrators.",
+                ForeColor = Color.Gray,
+                Location = new Point(20, 220),
+                Size = new Size(350, 30)
+            };
+
+            var uploadButton = new Button
+            {
+                Text = "Upload Here",
+                Location = new Point(230, 250),
+                Size = new Size(90, 30),
+                DialogResult = DialogResult.OK,
+                Enabled = false,
+                Name = "uploadButton"
+            };
+            uploadButton.Click += UploadButton_Click;
+
+            var cancelButton = new Button
+            {
+                Text = "Cancel",
+                Location = new Point(330, 250),
+                Size = new Size(70, 30),
+                DialogResult = DialogResult.Cancel
+            };
+
+            foldersListBox.SelectedIndexChanged += FoldersListBox_SelectedIndexChanged;
+
+            this.Controls.AddRange(new Control[]
+            {
+                titleLabel, instructionLabel, foldersListBox, noteLabel,
+                uploadButton, cancelButton
+            });
+
+            this.AcceptButton = uploadButton;
+            this.CancelButton = cancelButton;
+        }
+
+        private void PopulateFolders()
+        {
+            var foldersListBox = this.Controls.Find("foldersListBox", false)[0] as ListBox;
+            if (foldersListBox == null) return;
+
+            foreach (var folder in _allowedFolders)
+            {
+                foldersListBox.Items.Add($"📁 {folder}");
+            }
+        }
+
+        private void FoldersListBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            var listBox = sender as ListBox;
+            var uploadButton = this.Controls.Find("uploadButton", false)[0] as Button;
+
+            if (listBox != null && uploadButton != null)
+            {
+                uploadButton.Enabled = listBox.SelectedIndex >= 0;
+            }
+        }
+
+        private void UploadButton_Click(object? sender, EventArgs e)
+        {
+            var foldersListBox = this.Controls.Find("foldersListBox", false)[0] as ListBox;
+            if (foldersListBox != null && foldersListBox.SelectedIndex >= 0)
+            {
+                SelectedFolder = _allowedFolders[foldersListBox.SelectedIndex];
+            }
+        }
+    }
+
+    #endregion
 }
