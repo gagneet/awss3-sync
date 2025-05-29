@@ -134,34 +134,101 @@ namespace S3FileManager.Services
             return filteredFiles.OrderBy(f => f.Key).ToList();
         }
 
-        public async Task UploadFileAsync(string filePath, string key, List<UserRole> accessRoles)
+        private class S3ObjectAttributes
         {
-            var request = new PutObjectRequest
-            {
-                BucketName = _bucketName,
-                Key = key,
-                FilePath = filePath,
-                ContentType = GetContentType(filePath)
-            };
+            public DateTime LastModified { get; set; }
+            public long Size { get; set; }
+        }
 
-            await _s3Client.PutObjectAsync(request);
-            await _metadataService.SetFileAccessRolesAsync(key, accessRoles);
+        private async Task<S3ObjectAttributes?> GetS3ObjectAttributesAsync(string key)
+        {
+            try
+            {
+                var request = new GetObjectMetadataRequest
+                {
+                    BucketName = _bucketName,
+                    Key = key
+                };
+                var metadata = await _s3Client.GetObjectMetadataAsync(request);
+                return new S3ObjectAttributes
+                {
+                    LastModified = metadata.LastModified.ToUniversalTime(), // Ensure UTC
+                    Size = metadata.ContentLength
+                };
+            }
+            catch (Amazon.S3.AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null; // Object does not exist
+            }
+            // Allow other exceptions to propagate
+        }
+
+        public async Task<bool> UploadFileAsync(string filePath, string key, List<UserRole> accessRoles)
+        {
+            var localFileInfo = new FileInfo(filePath);
+            var localFileLastWriteTimeUtc = localFileInfo.LastWriteTimeUtc;
+            var localFileSize = localFileInfo.Length;
+
+            var s3ObjectAttributes = await GetS3ObjectAttributesAsync(key);
+
+            bool shouldUpload = false;
+            if (s3ObjectAttributes == null)
+            {
+                shouldUpload = true; // S3 object does not exist
+            }
+            else
+            {
+                // Compare LastModified (S3 is UTC, ensure local is UTC)
+                if (localFileLastWriteTimeUtc > s3ObjectAttributes.LastModified)
+                {
+                    shouldUpload = true; // Local file is newer
+                }
+                else if (localFileLastWriteTimeUtc == s3ObjectAttributes.LastModified)
+                {
+                    if (localFileSize != s3ObjectAttributes.Size)
+                    {
+                        shouldUpload = true; // Timestamps are identical, but sizes differ
+                    }
+                }
+                // else: S3 object is newer or same timestamp and size, so no upload
+            }
+
+            if (shouldUpload)
+            {
+                var request = new PutObjectRequest
+                {
+                    BucketName = _bucketName,
+                    Key = key,
+                    FilePath = filePath,
+                    ContentType = GetContentType(filePath)
+                };
+
+                await _s3Client.PutObjectAsync(request);
+                await _metadataService.SetFileAccessRolesAsync(key, accessRoles);
+                return true; // Uploaded
+            }
+            return false; // Skipped
         }
 
         public async Task UploadDirectoryAsync(string directoryPath, string keyPrefix, List<UserRole> accessRoles)
         {
+            // Ensure keyPrefix is correctly formatted (no leading/trailing slashes for internal logic)
+            string cleanKeyPrefix = keyPrefix.Trim('/');
+
             foreach (string file in Directory.GetFiles(directoryPath))
             {
                 string fileName = Path.GetFileName(file);
-                string key = $"{keyPrefix}/{fileName}";
-                await UploadFileAsync(file, key, accessRoles);
+                // Construct file key: if cleanKeyPrefix is empty, key is just fileName, otherwise prefix/fileName
+                string key = string.IsNullOrEmpty(cleanKeyPrefix) ? fileName : $"{cleanKeyPrefix}/{fileName}";
+                await UploadFileAsync(file, key, accessRoles); // UploadFileAsync now returns bool, can be used later
             }
 
             foreach (string subDir in Directory.GetDirectories(directoryPath))
             {
                 string dirName = Path.GetFileName(subDir);
-                string newKeyPrefix = $"{keyPrefix}/{dirName}";
-                await UploadDirectoryAsync(subDir, newKeyPrefix, accessRoles);
+                // Construct newKeyPrefix for subdirectory: if cleanKeyPrefix is empty, new prefix is just dirName, otherwise prefix/dirName
+                string newKeyPrefixForSubDir = string.IsNullOrEmpty(cleanKeyPrefix) ? dirName : $"{cleanKeyPrefix}/{dirName}";
+                await UploadDirectoryAsync(subDir, newKeyPrefixForSubDir, accessRoles);
             }
         }
 
