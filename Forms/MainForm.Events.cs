@@ -367,8 +367,8 @@ namespace S3FileManager
                             if (kvp.Value == true) // If checked
                             {
                                 var s3Item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
-                                // A folder can be identified by ending with "/" or by IsDirectory flag
-                                if (s3Item != null && (s3Item.Key.EndsWith("/") || s3Item.IsDirectory))
+                                // If S3FileItem.IsDirectory is true, its Key must end with "/".
+                                if (s3Item != null && s3Item.IsDirectory)
                                 {
                                     checkedS3Folders.Add(s3Item);
                                 }
@@ -379,13 +379,8 @@ namespace S3FileManager
                     if (checkedS3Folders.Count == 1)
                     {
                         var s3FolderItem = checkedS3Folders[0];
+                        // s3FolderItem.IsDirectory is true, so s3FolderItem.Key already ends with "/"
                         s3SourcePrefix = s3FolderItem.Key;
-                        if (!s3SourcePrefix.EndsWith("/")) // Ensure trailing slash for prefix
-                        {
-                             // If IsDirectory is true but key somehow doesn't have a slash, add it.
-                             // Or if Key has slash but IsDirectory is false (less likely for folders), still treat as prefix.
-                            s3SourcePrefix = s3SourcePrefix.TrimEnd('/') + "/";
-                        }
                     }
                     else if (checkedS3Folders.Count > 1)
                     {
@@ -393,23 +388,18 @@ namespace S3FileManager
                         progressForm.Close(); // Close progress form as it was shown before this check
                         return; // Abort sync
                     }
-                    else // No S3 folders checked, or _s3CheckedItems/_s3Files is null. Fallback to SelectedNode.
+                    else // No S3 folders checked. Fallback to SelectedNode.
                     {
                         if (s3TreeView != null && s3TreeView.SelectedNode != null)
                         {
                             var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
-                            if (s3Item != null)
+                            // If s3Item.IsDirectory is true, its Key must end with "/"
+                            if (s3Item != null && s3Item.IsDirectory)
                             {
-                                if (s3Item.Key.EndsWith("/"))
-                                {
-                                    s3SourcePrefix = s3Item.Key;
-                                }
-                                else if (s3Item.IsDirectory)
-                                {
-                                    s3SourcePrefix = s3Item.Key.TrimEnd('/') + "/";
-                                }
-                                // If selected node is a file, s3SourcePrefix remains "" (sync all from root)
+                                s3SourcePrefix = s3Item.Key;
                             }
+                            // If selected node is a file, or not an S3FileItem, s3SourcePrefix remains "" (sync all from root)
+                        }
                         }
                     }
                     
