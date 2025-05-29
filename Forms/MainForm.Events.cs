@@ -122,25 +122,20 @@ namespace S3FileManager
                     foreach (string childKey in directChildrenKeys.OrderBy(k => k))
                     {
                         S3FileItem childItem = _s3Files.FirstOrDefault(f => f.Key == childKey);
-                        bool isImplicitFolder = false;
-                        if (childItem == null && childKey.EndsWith("/")) // Implicit folder
+                        // bool isImplicitFolder = false; // Not strictly needed if Key defines IsDirectory
+                        if (childItem == null) // Implicit item (folder or file)
                         {
-                             childItem = new S3FileItem { Key = childKey, IsDirectory = true, Size = 0, LastModified = DateTime.MinValue };
-                             isImplicitFolder = true;
+                             // Key for childItem is childKey. S3FileItem's IsDirectory will be set based on childKey ending with "/"
+                             childItem = new S3FileItem { Key = childKey, Size = 0, LastModified = DateTime.MinValue };
+                             // isImplicitFolder = childKey.EndsWith("/"); // Can be used if needed for other logic
                         }
-                        else if (childItem == null) // Implicit file - should be less common if keys are well-formed
-                        {
-                            childItem = new S3FileItem { Key = childKey, IsDirectory = false, Size = 0, LastModified = DateTime.MinValue };
-                        }
-
-                        // Ensure IsDirectory is accurate
-                        if (childKey.EndsWith("/") && !childItem.IsDirectory) childItem.IsDirectory = true;
-                        if (isImplicitFolder) childItem.IsDirectory = true;
-
+                        // No direct assignment to childItem.IsDirectory needed.
+                        // The childFullKey logic (parentPrefix + childName + (isActualDirectory ? "/" : ""))
+                        // already ensures childKey (which is childFullKey) ends with "/" if it's a directory.
 
                         // Replicating AddSingleS3NodeToCollection's core logic here
                         string displayName = childItem.Key.TrimEnd('/');
-                        if (displayName.Contains('/'))
+                        if (displayName.Contains("/"))
                         {
                             displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
                         }
@@ -161,7 +156,7 @@ namespace S3FileManager
                                 hasGrandChildren = _s3Files.Any(f => {
                                     if (!f.Key.StartsWith(grandChildPrefixToCheck) || f.Key == grandChildPrefixToCheck) return false;
                                     string remainder = f.Key.Substring(grandChildPrefixToCheck.Length);
-                                    return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains('/');
+                                    return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains("/");
                                 });
                             }
                             if (hasGrandChildren)
@@ -424,7 +419,7 @@ namespace S3FileManager
                     // Close progress form before showing messages
                     progressForm.Close(); 
 
-                    if (extraLocalFiles != null && extraLocalFiles.Count != 0)
+                    if (extraLocalFiles != null && extraLocalFiles.Any())
                     {
                         string fileList = string.Join(Environment.NewLine, extraLocalFiles.Select(f => $"- {f}"));
                         string warningMessage = $"Sync complete. However, the following local files do not exist in the S3 bucket:{Environment.NewLine}{Environment.NewLine}{fileList}{Environment.NewLine}{Environment.NewLine}You may want to upload these files to S3 or remove them from your local folder if they are no longer needed.";
