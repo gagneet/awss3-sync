@@ -13,6 +13,7 @@ namespace S3FileManager
 {
     public partial class MainForm : Form
     {
+        // Core fields - shared across all partial files
         private readonly User _currentUser;
         private readonly S3Service _s3Service;
         private readonly FileService _fileService;
