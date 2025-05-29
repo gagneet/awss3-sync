@@ -268,8 +268,30 @@ namespace S3FileManager
                 else
                 {
                     // New sync: S3 to Local
-                    progressForm.UpdateMessage("Downloading S3 files to local folder...");
-                    List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, progressForm);
+
+                    // Determine s3SourcePrefix based on s3TreeView selection
+                    var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+                    string s3SourcePrefix = "";
+
+                    if (s3TreeView != null && s3TreeView.SelectedNode != null)
+                    {
+                        var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
+                        if (s3Item != null)
+                        {
+                            if (s3Item.Key.EndsWith("/"))
+                            {
+                                s3SourcePrefix = s3Item.Key;
+                            }
+                            else if (s3Item.IsDirectory) // IsDirectory might be true from metadata or tree structure
+                            {
+                                s3SourcePrefix = s3Item.Key.TrimEnd('/') + "/";
+                            }
+                            // If a file is selected, s3SourcePrefix remains "" (sync from root)
+                        }
+                    }
+
+                    progressForm.UpdateMessage($"Downloading S3 files (from prefix '{s3SourcePrefix}') to local folder...");
+                    List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, s3SourcePrefix, progressForm);
                     
                     // Close progress form before showing messages
                     progressForm.Close(); 

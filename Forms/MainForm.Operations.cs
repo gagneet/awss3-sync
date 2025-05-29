@@ -461,94 +461,111 @@ namespace S3FileManager
 
         #region Sync Operations
 
-        private async Task<List<string>> SyncS3ToLocal(string localPath, ProgressForm progressForm)
+        private async Task<List<string>> SyncS3ToLocal(string localPath, string s3SourcePrefix, ProgressForm progressForm)
         {
             var extraLocalFiles = new List<string>();
 
-            // 1. Get Local Files
-            var localFiles = new Dictionary<string, FileInfo>();
-            var allLocalFilePaths = Directory.GetFiles(localPath, "*", SearchOption.AllDirectories);
-            foreach (var filePath in allLocalFilePaths)
+            // --- Get Local Files (relative paths) ---
+            var localFileRelativePaths = new Dictionary<string, FileInfo>();
+            if (Directory.Exists(localPath))
             {
-                // Ensure the path uses Path.DirectorySeparatorChar consistently for relative path calculation
-                string fullPathNormalized = Path.GetFullPath(filePath);
-                string localPathNormalized = Path.GetFullPath(localPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                // Ensure localPath ends with a separator for correct substring relative path calculation
+                string adjustedLocalPath = localPath.EndsWith(Path.DirectorySeparatorChar.ToString()) 
+                                           ? localPath 
+                                           : localPath + Path.DirectorySeparatorChar;
 
-                if (fullPathNormalized.StartsWith(localPathNormalized, StringComparison.OrdinalIgnoreCase))
+                foreach (string filePath in Directory.EnumerateFiles(localPath, "*", SearchOption.AllDirectories))
                 {
-                    string relativePath = fullPathNormalized.Substring(localPathNormalized.Length);
-                    localFiles[relativePath] = new FileInfo(fullPathNormalized);
+                    string fullPathNormalized = Path.GetFullPath(filePath); // Normalize for safety
+                    if (fullPathNormalized.StartsWith(adjustedLocalPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string relativeLocalPath = filePath.Substring(adjustedLocalPath.Length);
+                        localFileRelativePaths[relativeLocalPath] = new FileInfo(filePath);
+                    }
                 }
             }
 
-            // 2. Get S3 Files (filter for files only)
-            var s3FileItems = _s3Files.Where(f => !f.IsDirectory).ToList();
-
-            if (s3FileItems.Count == 0)
+            // --- Filter and Process S3 Files ---
+            var allS3Files = _s3Files.Where(f => !f.IsDirectory).ToList();
+            // Normalize s3SourcePrefix to ensure it ends with a '/' if it's not empty
+            string normalizedS3SourcePrefix = s3SourcePrefix;
+            if (!string.IsNullOrEmpty(normalizedS3SourcePrefix) && !normalizedS3SourcePrefix.EndsWith("/"))
             {
-                progressForm.UpdateMessage("No files to sync from S3. Checking for local files to remove...");
-                // If no S3 files, all local files are extra
-                extraLocalFiles.AddRange(localFiles.Keys.Select(relPath => Path.Combine(localPath, relPath)));
+                normalizedS3SourcePrefix += "/";
+            }
+            // If s3SourcePrefix is empty, we want to match all files (root level sync)
+            // So, StartsWith("") is true for all strings.
+            // If s3SourcePrefix is "folder/", we only match keys starting with "folder/".
+            var relevantS3Files = string.IsNullOrEmpty(s3SourcePrefix) // Allow empty prefix for root
+                                  ? allS3Files 
+                                  : allS3Files.Where(f => f.Key.StartsWith(normalizedS3SourcePrefix)).ToList();
+
+            if (relevantS3Files.Count == 0)
+            {
+                progressForm.UpdateMessage($"No files found in S3 path: '{s3SourcePrefix}'. Checking for local files to remove...");
+                // All local files are extra if no S3 files are relevant
+                extraLocalFiles.AddRange(localFileRelativePaths.Values.Select(fi => fi.FullName));
+                progressForm.UpdateMessage("Sync process completed.");
                 return extraLocalFiles;
             }
-
-            // 3. Compare and Download
-            var s3FileKeys = new HashSet<string>(s3FileItems.Select(f => f.Key.Replace('/', Path.DirectorySeparatorChar)));
-
-            for (int i = 0; i < s3FileItems.Count; i++)
+            else
             {
-                var s3File = s3FileItems[i];
-                progressForm.UpdateMessage($"Syncing: {s3File.Key} ({i + 1}/{s3FileItems.Count})");
-
-                string s3RelativePath = s3File.Key.Replace('/', Path.DirectorySeparatorChar);
-                string localFilePath = Path.Combine(localPath, s3RelativePath);
-                string localFileDir = Path.GetDirectoryName(localFilePath) ?? localPath;
-
-                if (!Directory.Exists(localFileDir))
+                for (int i = 0; i < relevantS3Files.Count; i++)
                 {
-                    Directory.CreateDirectory(localFileDir);
-                }
+                    var s3File = relevantS3Files[i];
+                    // Ensure s3SourcePrefix is used for substring, not normalizedS3SourcePrefix if original was empty
+                    string relativeS3Path = s3File.Key.Substring(s3SourcePrefix.Length); 
+                    if (string.IsNullOrEmpty(relativeS3Path)) continue; // Skip if key was identical to prefix itself
 
-                bool shouldDownload = true; // Default to download
-                if (localFiles.TryGetValue(s3RelativePath, out var localFileInfo))
-                {
-                    // File exists locally, check modification date and size
-                    if (localFileInfo.LastWriteTimeUtc >= s3File.LastModified.ToUniversalTime() && localFileInfo.Length == s3File.Size)
+                    progressForm.UpdateMessage($"Syncing: {s3File.Key} ({i + 1}/{relevantS3Files.Count})");
+
+                    string localFilePath = Path.Combine(localPath, relativeS3Path.Replace('/', Path.DirectorySeparatorChar));
+                    string localFileDir = Path.GetDirectoryName(localFilePath) ?? localPath;
+
+                    if (!Directory.Exists(localFileDir))
                     {
-                        shouldDownload = false;
+                        Directory.CreateDirectory(localFileDir);
                     }
-                }
-                // If not in localFiles dictionary, it means it doesn't exist locally, so shouldDownload remains true.
 
-                if (shouldDownload)
-                {
-                    progressForm.UpdateMessage($"Downloading: {s3File.Key}");
-                    await _s3Service.DownloadFileAsync(s3File.Key, localFileDir);
-                    // Update local file info after download for accurate comparison later
-                    if (localFiles.ContainsKey(s3RelativePath))
+                    bool shouldDownload = true;
+                    // Key for localFileRelativePaths uses Path.DirectorySeparatorChar
+                    string localRelativePathKey = relativeS3Path.Replace('/', Path.DirectorySeparatorChar);
+                    if (localFileRelativePaths.TryGetValue(localRelativePathKey, out var localFileInfo))
                     {
-                        localFiles[s3RelativePath].Refresh(); // Refresh existing FileInfo
+                        if (localFileInfo.LastWriteTimeUtc >= s3File.LastModified.ToUniversalTime() && localFileInfo.Length == s3File.Size)
+                        {
+                            shouldDownload = false;
+                        }
                     }
-                    else
+
+                    if (shouldDownload)
                     {
-                         // If it was a new file, it's not in localFiles yet,
-                         // but it's not an "extra" local file.
-                         // For the purpose of identifying extra files, we don't need to add it here.
+                        progressForm.UpdateMessage($"Downloading: {s3File.Key}");
+                        await _s3Service.DownloadFileAsync(s3File.Key, localFileDir); // Pass full s3File.Key
+                        if (localFileRelativePaths.ContainsKey(localRelativePathKey))
+                        {
+                            localFileRelativePaths[localRelativePathKey].Refresh();
+                        }
+                        // If new, it's not "extra", so no need to add to localFileRelativePaths for this part
                     }
                 }
             }
 
-            // 4. Identify Extra Local Files
+            // --- Identify Extra Local Files ---
             progressForm.UpdateMessage("Identifying extra local files...");
-            foreach (var localFileEntry in localFiles)
+            // These keys from S3 are like "file.txt" or "subfolder/file.txt"
+            var relevantS3RelativeKeys = new HashSet<string>(relevantS3Files.Select(f => f.Key.Substring(s3SourcePrefix.Length)));
+
+            foreach (var kvp in localFileRelativePaths)
             {
-                // Convert S3 keys to be comparable with local relative paths
-                // S3 keys use '/', local relative paths use Path.DirectorySeparatorChar
-                if (!s3FileKeys.Contains(localFileEntry.Key))
+                // kvp.Key is like "file.txt" or "subfolder\file.txt"
+                string s3ComparableRelativePath = kvp.Key.Replace(Path.DirectorySeparatorChar, '/');
+                if (!relevantS3RelativeKeys.Contains(s3ComparableRelativePath))
                 {
-                    extraLocalFiles.Add(localFileEntry.Value.FullName);
+                    extraLocalFiles.Add(kvp.Value.FullName);
                 }
             }
+            
             progressForm.UpdateMessage("Sync process completed.");
             return extraLocalFiles;
         }
