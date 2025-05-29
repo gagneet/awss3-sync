@@ -268,28 +268,63 @@ namespace S3FileManager
                 else
                 {
                     // New sync: S3 to Local
-
-                    // Determine s3SourcePrefix based on s3TreeView selection
-                    var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
                     string s3SourcePrefix = "";
+                    var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
 
-                    if (s3TreeView != null && s3TreeView.SelectedNode != null)
+                    List<S3FileItem> checkedS3Folders = new List<S3FileItem>();
+                    if (_s3CheckedItems != null && _s3Files != null) // Ensure _s3Files is available
                     {
-                        var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
-                        if (s3Item != null)
+                        foreach (var kvp in _s3CheckedItems)
                         {
-                            if (s3Item.Key.EndsWith("/"))
+                            if (kvp.Value == true) // If checked
                             {
-                                s3SourcePrefix = s3Item.Key;
+                                var s3Item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
+                                // A folder can be identified by ending with "/" or by IsDirectory flag
+                                if (s3Item != null && (s3Item.Key.EndsWith("/") || s3Item.IsDirectory))
+                                {
+                                    checkedS3Folders.Add(s3Item);
+                                }
                             }
-                            else if (s3Item.IsDirectory) // IsDirectory might be true from metadata or tree structure
-                            {
-                                s3SourcePrefix = s3Item.Key.TrimEnd('/') + "/";
-                            }
-                            // If a file is selected, s3SourcePrefix remains "" (sync from root)
                         }
                     }
 
+                    if (checkedS3Folders.Count == 1)
+                    {
+                        var s3FolderItem = checkedS3Folders[0];
+                        s3SourcePrefix = s3FolderItem.Key;
+                        if (!s3SourcePrefix.EndsWith("/")) // Ensure trailing slash for prefix
+                        {
+                             // If IsDirectory is true but key somehow doesn't have a slash, add it.
+                             // Or if Key has slash but IsDirectory is false (less likely for folders), still treat as prefix.
+                            s3SourcePrefix = s3SourcePrefix.TrimEnd('/') + "/";
+                        }
+                    }
+                    else if (checkedS3Folders.Count > 1)
+                    {
+                        MessageBox.Show("Please check only one S3 folder to use as the source for the sync.", "Multiple S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        progressForm.Close(); // Close progress form as it was shown before this check
+                        return; // Abort sync
+                    }
+                    else // No S3 folders checked, or _s3CheckedItems/_s3Files is null. Fallback to SelectedNode.
+                    {
+                        if (s3TreeView != null && s3TreeView.SelectedNode != null)
+                        {
+                            var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
+                            if (s3Item != null)
+                            {
+                                if (s3Item.Key.EndsWith("/"))
+                                {
+                                    s3SourcePrefix = s3Item.Key;
+                                }
+                                else if (s3Item.IsDirectory)
+                                {
+                                    s3SourcePrefix = s3Item.Key.TrimEnd('/') + "/";
+                                }
+                                // If selected node is a file, s3SourcePrefix remains "" (sync all from root)
+                            }
+                        }
+                    }
+                    
                     progressForm.UpdateMessage($"Downloading S3 files (from prefix '{s3SourcePrefix}') to local folder...");
                     List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, s3SourcePrefix, progressForm);
                     
