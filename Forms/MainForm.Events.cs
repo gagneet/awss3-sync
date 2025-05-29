@@ -400,9 +400,10 @@ namespace S3FileManager
                             }
                             // If selected node is a file, or not an S3FileItem, s3SourcePrefix remains "" (sync all from root)
                         }
-                        }
-                    }
+                        // Extra brace was here, it's now removed.
+                    } // This closes the "else // No S3 folders checked. Fallback to SelectedNode."
                     
+                    // This code is now correctly positioned within the S3-to-Local 'else' block
                     progressForm.UpdateMessage($"Downloading S3 files (from prefix '{s3SourcePrefix}') to local folder...");
                     List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, s3SourcePrefix, progressForm);
                     
