@@ -424,7 +424,7 @@ namespace S3FileManager
                     // Close progress form before showing messages
                     progressForm.Close(); 
 
-                    if (extraLocalFiles != null && extraLocalFiles.Any())
+                    if (extraLocalFiles != null && extraLocalFiles.Count != 0)
                     {
                         string fileList = string.Join(Environment.NewLine, extraLocalFiles.Select(f => $"- {f}"));
                         string warningMessage = $"Sync complete. However, the following local files do not exist in the S3 bucket:{Environment.NewLine}{Environment.NewLine}{fileList}{Environment.NewLine}{Environment.NewLine}You may want to upload these files to S3 or remove them from your local folder if they are no longer needed.";
