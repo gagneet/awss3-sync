@@ -17,6 +17,261 @@ namespace S3FileManager
         S3ToLocal
     }
 
+    // Sync Summary and Confirmation Form
+    public class SyncSummaryForm : Form
+    {
+        private readonly List<S3FileItem> _filesToDownload;
+        private readonly List<S3FileItem> _filesToUpdate;
+        private readonly List<LocalFileInfo> _localOnlyFiles;
+
+        public bool UploadLocalOnlyFiles { get; private set; } = false;
+
+        public SyncSummaryForm(List<S3FileItem> filesToDownload, List<S3FileItem> filesToUpdate, List<LocalFileInfo> localOnlyFiles)
+        {
+            _filesToDownload = filesToDownload;
+            _filesToUpdate = filesToUpdate;
+            _localOnlyFiles = localOnlyFiles;
+            InitializeComponent();
+            PopulateSummary();
+        }
+
+        private void InitializeComponent()
+        {
+            this.Size = new Size(700, 600);
+            this.Text = "Sync Summary - Review Changes";
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+
+            var titleLabel = new Label
+            {
+                Text = "📋 Synchronization Summary",
+                Font = new Font("Arial", 14, FontStyle.Bold),
+                Location = new Point(20, 20),
+                Size = new Size(650, 30),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            var tabControl = new TabControl
+            {
+                Location = new Point(20, 60),
+                Size = new Size(650, 400),
+                Name = "tabControl"
+            };
+
+            // Tab 1: Files to Download
+            var downloadTab = new TabPage("📥 New Files from S3")
+            {
+                Name = "downloadTab"
+            };
+
+            var downloadLabel = new Label
+            {
+                Text = $"Files to download from S3 ({_filesToDownload.Count} files):",
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                Location = new Point(10, 10),
+                Size = new Size(600, 25)
+            };
+
+            var downloadListBox = new ListBox
+            {
+                Location = new Point(10, 40),
+                Size = new Size(610, 320),
+                Name = "downloadListBox"
+            };
+
+            downloadTab.Controls.AddRange(new Control[] { downloadLabel, downloadListBox });
+
+            // Tab 2: Files to Update
+            var updateTab = new TabPage("🔄 Files to Update")
+            {
+                Name = "updateTab"
+            };
+
+            var updateLabel = new Label
+            {
+                Text = $"Files to update (S3 version is newer) ({_filesToUpdate.Count} files):",
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                Location = new Point(10, 10),
+                Size = new Size(600, 25)
+            };
+
+            var updateListBox = new ListBox
+            {
+                Location = new Point(10, 40),
+                Size = new Size(610, 320),
+                Name = "updateListBox"
+            };
+
+            updateTab.Controls.AddRange(new Control[] { updateLabel, updateListBox });
+
+            // Tab 3: Local Only Files
+            var localTab = new TabPage("📁 Local Only Files")
+            {
+                Name = "localTab"
+            };
+
+            var localLabel = new Label
+            {
+                Text = $"Files that exist only locally ({_localOnlyFiles.Count} files):",
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                Location = new Point(10, 10),
+                Size = new Size(600, 25)
+            };
+
+            var localListBox = new ListBox
+            {
+                Location = new Point(10, 40),
+                Size = new Size(610, 280),
+                Name = "localListBox"
+            };
+
+            var uploadLocalCheckBox = new CheckBox
+            {
+                Text = "📤 Upload these local files to S3 (you'll choose permissions next)",
+                Location = new Point(10, 330),
+                Size = new Size(600, 25),
+                Name = "uploadLocalCheckBox",
+                Font = new Font("Arial", 9, FontStyle.Bold),
+                ForeColor = Color.DarkBlue
+            };
+
+            localTab.Controls.AddRange(new Control[] { localLabel, localListBox, uploadLocalCheckBox });
+
+            tabControl.TabPages.AddRange(new TabPage[] { downloadTab, updateTab, localTab });
+
+            // Summary section
+            var summaryLabel = new Label
+            {
+                Text = "Summary:",
+                Font = new Font("Arial", 11, FontStyle.Bold),
+                Location = new Point(20, 480),
+                Size = new Size(100, 25)
+            };
+
+            var summaryText = new Label
+            {
+                Text = $"• {_filesToDownload.Count} new files will be downloaded\n" +
+                       $"• {_filesToUpdate.Count} files will be updated\n" +
+                       $"• {_localOnlyFiles.Count} local-only files found",
+                Location = new Point(40, 510),
+                Size = new Size(400, 60),
+                ForeColor = Color.DarkGreen
+            };
+
+            // Buttons
+            var proceedButton = new Button
+            {
+                Text = "✅ Proceed with Sync",
+                Location = new Point(450, 520),
+                Size = new Size(130, 35),
+                DialogResult = DialogResult.OK,
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                BackColor = Color.LightGreen
+            };
+            proceedButton.Click += ProceedButton_Click;
+
+            var cancelButton = new Button
+            {
+                Text = "❌ Cancel",
+                Location = new Point(590, 520),
+                Size = new Size(80, 35),
+                DialogResult = DialogResult.Cancel
+            };
+
+            this.Controls.AddRange(new Control[]
+            {
+                titleLabel, tabControl, summaryLabel, summaryText, proceedButton, cancelButton
+            });
+
+            this.AcceptButton = proceedButton;
+            this.CancelButton = cancelButton;
+        }
+
+        private void PopulateSummary()
+        {
+            // Populate download list
+            var downloadListBox = this.Controls.Find("downloadListBox", true)[0] as ListBox;
+            if (downloadListBox != null)
+            {
+                foreach (var file in _filesToDownload)
+                {
+                    downloadListBox.Items.Add($"📄 {file.Key} ({FormatFileSize(file.Size)})");
+                }
+
+                if (_filesToDownload.Count == 0)
+                {
+                    downloadListBox.Items.Add("✅ No new files to download - everything is up to date!");
+                }
+            }
+
+            // Populate update list
+            var updateListBox = this.Controls.Find("updateListBox", true)[0] as ListBox;
+            if (updateListBox != null)
+            {
+                foreach (var file in _filesToUpdate)
+                {
+                    updateListBox.Items.Add($"🔄 {file.Key} ({FormatFileSize(file.Size)}) - newer version available");
+                }
+
+                if (_filesToUpdate.Count == 0)
+                {
+                    updateListBox.Items.Add("✅ No files need updating - everything is current!");
+                }
+            }
+
+            // Populate local-only list
+            var localListBox = this.Controls.Find("localListBox", true)[0] as ListBox;
+            if (localListBox != null)
+            {
+                foreach (var file in _localOnlyFiles)
+                {
+                    localListBox.Items.Add($"📁 {file.RelativePath} ({FormatFileSize(file.Size)}) - local only");
+                }
+
+                if (_localOnlyFiles.Count == 0)
+                {
+                    localListBox.Items.Add("✅ No local-only files found - perfect sync!");
+                }
+            }
+
+            // Enable/disable upload checkbox based on local files
+            var uploadCheckBox = this.Controls.Find("uploadLocalCheckBox", true)[0] as CheckBox;
+            if (uploadCheckBox != null)
+            {
+                uploadCheckBox.Enabled = _localOnlyFiles.Count > 0;
+                if (_localOnlyFiles.Count == 0)
+                {
+                    uploadCheckBox.Text = "No local-only files to upload";
+                    uploadCheckBox.ForeColor = Color.Gray;
+                }
+            }
+        }
+
+        private void ProceedButton_Click(object? sender, EventArgs e)
+        {
+            var uploadCheckBox = this.Controls.Find("uploadLocalCheckBox", true)[0] as CheckBox;
+            if (uploadCheckBox != null)
+            {
+                UploadLocalOnlyFiles = uploadCheckBox.Checked;
+            }
+        }
+
+        private string FormatFileSize(long bytes)
+        {
+            string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+            double len = bytes;
+            int order = 0;
+            while (len >= 1024 && order < sizes.Length - 1)
+            {
+                order++;
+                len = len / 1024;
+            }
+            return $"{len:0.##} {sizes[order]}";
+        }
+    }
+
     // Sync Direction Selection Form
     public class SyncDirectionForm : Form
     {

@@ -366,6 +366,74 @@ namespace S3FileManager
 
         // The old AddS3ItemToTreeOptimized is removed as its path-building logic is not used in lazy loading.
         // The new AddSingleS3NodeToCollection and the logic within UpdateS3TreeViewOptimized and S3TreeView_BeforeExpand handle node creation.
+        private void AddS3ItemToTreeOptimized(TreeView treeView, Dictionary<string, TreeNode> nodeCache, S3FileItem item)
+        {
+            var pathParts = item.Key.Split('/');
+            TreeNodeCollection currentNodes = treeView.Nodes;
+            string currentPath = "";
+
+            for (int i = 0; i < pathParts.Length; i++)
+            {
+                var part = pathParts[i];
+                if (string.IsNullOrEmpty(part)) continue;
+
+                currentPath += (i > 0 ? "/" : "") + part;
+                bool isLastPart = i == pathParts.Length - 1;
+                bool isFile = isLastPart && !item.IsDirectory;
+
+                // Check cache first for performance
+                TreeNode? existingNode = null;
+                if (nodeCache.ContainsKey(currentPath))
+                {
+                    existingNode = nodeCache[currentPath];
+                }
+                else
+                {
+                    // Look for existing node in current level only
+                    foreach (TreeNode node in currentNodes)
+                    {
+                        if (node.Tag is S3FileItem nodeItem &&
+                            (nodeItem.Key == currentPath || nodeItem.Key == currentPath + "/"))
+                        {
+                            existingNode = node;
+                            nodeCache[currentPath] = node;
+                            break;
+                        }
+                    }
+                }
+
+                if (existingNode == null)
+                {
+                    // Create new node
+                    var nodeItem = new S3FileItem
+                    {
+                        Key = isFile ? currentPath : currentPath + "/",
+                        Size = isFile ? item.Size : 0,
+                        LastModified = item.LastModified,
+                        AccessRoles = item.AccessRoles
+                    };
+
+                    string displayText = isFile ?
+                        $"📄 {part} ({_fileService.FormatFileSize(item.Size)})" :
+                        $"📁 {part}";
+
+                    var newNode = new TreeNode(displayText)
+                    {
+                        Tag = nodeItem,
+                        Name = currentPath // Set name for easier searching
+                    };
+
+                    currentNodes.Add(newNode);
+                    nodeCache[currentPath] = newNode;
+                    existingNode = newNode;
+                }
+
+                if (!isLastPart)
+                {
+                    currentNodes = existingNode.Nodes;
+                }
+            }
+        }
 
         private List<S3FileItem> GetCheckedS3Items()
         {
@@ -576,6 +644,47 @@ namespace S3FileManager
             
             progressForm.UpdateMessage("Sync process completed.");
             return extraLocalFiles;
+
+        private async Task SyncS3ToLocal(string localPath, ProgressForm progressForm)
+        {
+            // Get all accessible S3 files
+            var accessibleFiles = _s3Files.Where(f => !f.IsDirectory).ToList();
+
+            if (accessibleFiles.Count == 0)
+            {
+                progressForm.UpdateMessage("No files to sync from S3.");
+                return;
+            }
+
+            for (int i = 0; i < accessibleFiles.Count; i++)
+            {
+                var s3File = accessibleFiles[i];
+                progressForm.UpdateMessage($"Syncing: {s3File.Key} ({i + 1}/{accessibleFiles.Count})");
+
+                // Create local file path maintaining S3 folder structure
+                string localFilePath = Path.Combine(localPath, s3File.Key.Replace('/', Path.DirectorySeparatorChar));
+                string localFileDir = Path.GetDirectoryName(localFilePath) ?? localPath;
+
+                // Create directory if it doesn't exist
+                if (!Directory.Exists(localFileDir))
+                {
+                    Directory.CreateDirectory(localFileDir);
+                }
+
+                // Check if file needs to be downloaded (doesn't exist or is older)
+                bool shouldDownload = !File.Exists(localFilePath);
+                if (!shouldDownload)
+                {
+                    var localFileInfo = new FileInfo(localFilePath);
+                    // Download if S3 file is newer or sizes don't match
+                    shouldDownload = localFileInfo.LastWriteTime < s3File.LastModified || localFileInfo.Length != s3File.Size;
+                }
+
+                if (shouldDownload)
+                {
+                    await _s3Service.DownloadFileAsync(s3File.Key, localFileDir);
+                }
+            }
         }
 
         private async Task ApplyPermissionsRecursively(string folderKey, List<UserRole> roles, MetadataService metadataService)
@@ -590,5 +699,7 @@ namespace S3FileManager
         }
 
         #endregion
+        
+        private TableLayoutPanel mainPanel;
     }
 }
