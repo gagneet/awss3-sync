@@ -420,56 +420,92 @@ namespace S3FileManager
                     string s3SourcePrefix = "";
                     var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
 
-                    List<S3FileItem> checkedS3Folders = new List<S3FileItem>();
-                    if (_s3CheckedItems != null && _s3Files != null) // Ensure _s3Files is available
+                    // 2. Candidate from Selected Node
+                    string selectedS3ItemKeyCandidate = "";
+                    if (s3TreeView?.SelectedNode?.Tag is S3FileItem selectedS3Item && selectedS3Item.IsDirectory)
                     {
-                        foreach (var kvp in _s3CheckedItems)
+                        selectedS3ItemKeyCandidate = selectedS3Item.Key;
+                    }
+
+                    // 3. Candidate(s) from Checked Nodes
+                    string finalCheckedFolderCandidate = "";
+                    if (_s3CheckedItems != null && _s3Files != null)
+                    {
+                        List<string> allCheckedKeys = _s3CheckedItems.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+                        List<string> potentialTopMostCheckedFolderKeys = new List<string>();
+
+                        foreach (string key in allCheckedKeys)
                         {
-                            if (kvp.Value == true) // If checked
+                            var s3Item = _s3Files.FirstOrDefault(f => f.Key == key);
+                            bool isDirectoryCandidate = (s3Item != null && s3Item.IsDirectory) || (s3Item == null && key.EndsWith("/"));
+
+                            if (isDirectoryCandidate)
                             {
-                                var s3Item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
-                                // If S3FileItem.IsDirectory is true, its Key must end with "/".
-                                if (s3Item != null && s3Item.IsDirectory)
+                                // Check if this key is a sub-path of any *other* checked key.
+                                bool isTopMost = !allCheckedKeys.Any(otherKey => key != otherKey && key.StartsWith(otherKey));
+                                if (isTopMost)
                                 {
-                                    checkedS3Folders.Add(s3Item);
+                                    potentialTopMostCheckedFolderKeys.Add(key);
                                 }
                             }
                         }
+                        // Ensure uniqueness, though the logic for top-most should inherently handle most cases of direct parent/child.
+                        potentialTopMostCheckedFolderKeys = potentialTopMostCheckedFolderKeys.Distinct().ToList();
+
+
+                        if (potentialTopMostCheckedFolderKeys.Count == 1)
+                        {
+                            finalCheckedFolderCandidate = potentialTopMostCheckedFolderKeys[0];
+                        }
+                        else if (potentialTopMostCheckedFolderKeys.Count > 1)
+                        {
+                            MessageBox.Show("Multiple distinct S3 folders are checked. Please select or check only one main S3 folder to be the source.", "Ambiguous Source Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            progressForm.Close();
+                            return; // Abort sync
+                        }
                     }
 
-                    if (checkedS3Folders.Count == 1)
+                    // 4. Determine Final s3SourcePrefix
+                    if (!string.IsNullOrEmpty(selectedS3ItemKeyCandidate) && !string.IsNullOrEmpty(finalCheckedFolderCandidate))
                     {
-                        var s3FolderItem = checkedS3Folders[0];
-                        // s3FolderItem.IsDirectory is true, so s3FolderItem.Key already ends with "/"
-                        s3SourcePrefix = s3FolderItem.Key;
+                        if (selectedS3ItemKeyCandidate != finalCheckedFolderCandidate)
+                        {
+                            MessageBox.Show("The selected S3 folder and the checked S3 folder are different. Please clarify your intended source folder by unchecking or selecting the correct one.", "Ambiguous S3 Source", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            progressForm.Close();
+                            return; // Abort sync
+                        }
+                        s3SourcePrefix = selectedS3ItemKeyCandidate; // They are the same
                     }
-                    else if (checkedS3Folders.Count > 1)
+                    else if (!string.IsNullOrEmpty(selectedS3ItemKeyCandidate))
                     {
-                        MessageBox.Show("Please check only one S3 folder to use as the source for the sync.", "Multiple S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        progressForm.Close(); // Close progress form as it was shown before this check
+                        s3SourcePrefix = selectedS3ItemKeyCandidate;
+                    }
+                    else if (!string.IsNullOrEmpty(finalCheckedFolderCandidate))
+                    {
+                        s3SourcePrefix = finalCheckedFolderCandidate;
+                    }
+
+                    // 5. Final Validation and Formatting
+                    if (string.IsNullOrEmpty(s3SourcePrefix))
+                    {
+                        MessageBox.Show("Please select or check a single S3 folder to be the source for the sync. This folder's contents will be downloaded to your selected local path.", "No Source S3 Folder Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        progressForm.Close();
                         return; // Abort sync
                     }
-                    else // No S3 folders checked. Fallback to SelectedNode.
+
+                    // Ensure s3SourcePrefix (which should be a directory key) ends with a "/".
+                    // Keys from S3FileItem.IsDirectory or implicit folders ending with "/" should already be correct.
+                    // This is a safeguard.
+                    if (!s3SourcePrefix.EndsWith("/"))
                     {
-                        if (s3TreeView != null && s3TreeView.SelectedNode != null)
-                        {
-                            var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
-                            // If s3Item.IsDirectory is true, its Key must end with "/"
-                            if (s3Item != null && s3Item.IsDirectory)
-                            {
-                                s3SourcePrefix = s3Item.Key;
-                            }
-                            // If selected node is a file, or not an S3FileItem, s3SourcePrefix remains "" (sync all from root)
-                        }
-                        // Extra brace was here, it's now removed.
-                    } // This closes the "else // No S3 folders checked. Fallback to SelectedNode."
+                        s3SourcePrefix += "/";
+                    }
                     
-                    // This code is now correctly positioned within the S3-to-Local 'else' block
                     progressForm.UpdateMessage($"Downloading S3 files (from prefix '{s3SourcePrefix}') to local folder...");
                     List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, s3SourcePrefix, progressForm);
                     
                     // Close progress form before showing messages
-                    progressForm.Close(); 
+                    progressForm.Close();
 
                     if (extraLocalFiles != null && extraLocalFiles.Any())
                     {
