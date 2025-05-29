@@ -253,7 +253,7 @@ namespace S3FileManager
         private void AddSingleS3NodeToCollection(TreeNodeCollection parentNodes, S3FileItem item, bool addDummyNodeIfFolderHasChildren)
         {
             string displayName = item.Key.TrimEnd('/');
-            if (displayName.Contains("/"))
+            if (displayName.Contains('/'))
             {
                 displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
             }
