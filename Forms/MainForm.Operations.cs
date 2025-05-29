@@ -234,6 +234,50 @@ namespace S3FileManager
             }
         }
 
+        // Helper to determine if an S3 item (given its key, which should be a folder prefix) has immediate children
+        private bool S3FolderHasImmediateChildren(string folderKeyPrefix)
+        {
+            if (string.IsNullOrEmpty(folderKeyPrefix)) return false; 
+            
+            string normalizedPrefix = folderKeyPrefix.EndsWith("/") ? folderKeyPrefix : folderKeyPrefix + "/";
+
+            return _s3Files.Any(f => {
+                if (!f.Key.StartsWith(normalizedPrefix) || f.Key == normalizedPrefix) return false; 
+                string remainder = f.Key.Substring(normalizedPrefix.Length);
+                return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains('/'); 
+            });
+        }
+
+        // Method to add a single S3FileItem as a TreeNode to a given collection.
+        // addDummyNodeIfFolderHasChildren is true if we are in a context where "Loading..." nodes are desired.
+        private void AddSingleS3NodeToCollection(TreeNodeCollection parentNodes, S3FileItem item, bool addDummyNodeIfFolderHasChildren)
+        {
+            string displayName = item.Key.TrimEnd('/');
+            if (displayName.Contains('/'))
+            {
+                displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
+            }
+
+            string nodeText = item.IsDirectory 
+                ? $"📁 {displayName}" 
+                : $"📄 {displayName} ({_fileService.FormatFileSize(item.Size)})";
+
+            var newNode = new TreeNode(nodeText)
+            {
+                Tag = item,
+                Name = item.Key 
+            };
+
+            if (item.IsDirectory && addDummyNodeIfFolderHasChildren)
+            {
+                if (S3FolderHasImmediateChildren(item.Key))
+                {
+                    newNode.Nodes.Add(new TreeNode("Loading..."));
+                }
+            }
+            parentNodes.Add(newNode);
+        }
+        
         private void UpdateS3TreeViewOptimized()
         {
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
@@ -244,28 +288,58 @@ namespace S3FileManager
 
             try
             {
-                // Store current expanded states (skip scroll position for now to avoid errors)
                 var expandedNodes = new HashSet<string>();
                 StoreExpandedStates(s3TreeView.Nodes, expandedNodes);
-
+                
                 s3TreeView.Nodes.Clear();
 
-                // Build tree structure efficiently
-                var nodeCache = new Dictionary<string, TreeNode>();
+                if (_s3Files == null) _s3Files = new List<S3FileItem>();
 
-                // Sort files for better performance
-                var sortedFiles = _s3Files.OrderBy(f => f.Key).ToList();
-
-                foreach (var item in sortedFiles)
+                var topLevelKeys = new HashSet<string>();
+                foreach (var s3File in _s3Files)
                 {
-                    AddS3ItemToTreeOptimized(s3TreeView, nodeCache, item);
+                    var keyParts = s3File.Key.Split(new[] {'/'}, StringSplitOptions.RemoveEmptyEntries);
+                    if (keyParts.Length > 0)
+                    {
+                        string firstPart = keyParts[0];
+                        // A key like "folderA" (no trailing slash) is a file unless IsDirectory is true.
+                        // A key like "folderA/" is a folder.
+                        // If original key was "folderA/file.txt", topLevelKey should be "folderA/"
+                        bool isFolderViaPath = s3File.Key.Length > firstPart.Length && s3File.Key[firstPart.Length] == '/';
+                        string topLevelKey = isFolderViaPath ? firstPart + "/" : firstPart;
+                        topLevelKeys.Add(topLevelKey);
+                    }
                 }
+                
+                foreach (string topKey in topLevelKeys.OrderBy(k => k))
+                {
+                    S3FileItem topLevelItem = _s3Files.FirstOrDefault(f => f.Key == topKey);
+                    
+                    if (topLevelItem == null && topKey.EndsWith("/")) // Implicit folder
+                    {
+                        topLevelItem = new S3FileItem { Key = topKey, IsDirectory = true, Size = 0, LastModified = DateTime.MinValue };
+                    }
+                    else if (topLevelItem == null) // Implicit file (e.g. key "file.txt" but no explicit S3Object for it)
+                    {
+                         // This case should be rare if _s3Files is comprehensive and derived correctly.
+                        topLevelItem = new S3FileItem { Key = topKey, IsDirectory = false, Size = 0, LastModified = DateTime.MinValue };
+                    }
 
-                // Restore expanded states
+                    // Ensure IsDirectory is correctly set if it's a folder key, or if the original S3FileItem said so.
+                    if (topKey.EndsWith("/") && !topLevelItem.IsDirectory)
+                    {
+                        topLevelItem.IsDirectory = true;
+                    }
+                    var originalS3FileForTopKey = _s3Files.FirstOrDefault(f => f.Key == topKey);
+                    if (originalS3FileForTopKey != null && originalS3FileForTopKey.IsDirectory) {
+                        topLevelItem.IsDirectory = true;
+                    }
+
+                    AddSingleS3NodeToCollection(s3TreeView.Nodes, topLevelItem, true); // true: addDummyNodeIfFolderHasChildren
+                }
+                
                 RestoreExpandedStates(s3TreeView.Nodes, expandedNodes);
-
-                // Restore checked states
-                RestoreCheckedStates(s3TreeView.Nodes, _s3CheckedItems, true);
+                RestoreCheckedStates(s3TreeView.Nodes, _s3CheckedItems, true); // true for S3 items
 
                 // Update UI labels
                 var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
@@ -290,74 +364,8 @@ namespace S3FileManager
             }
         }
 
-        private void AddS3ItemToTreeOptimized(TreeView treeView, Dictionary<string, TreeNode> nodeCache, S3FileItem item)
-        {
-            var pathParts = item.Key.Split('/');
-            TreeNodeCollection currentNodes = treeView.Nodes;
-            string currentPath = "";
-
-            for (int i = 0; i < pathParts.Length; i++)
-            {
-                var part = pathParts[i];
-                if (string.IsNullOrEmpty(part)) continue;
-
-                currentPath += (i > 0 ? "/" : "") + part;
-                bool isLastPart = i == pathParts.Length - 1;
-                bool isFile = isLastPart && !item.IsDirectory;
-
-                // Check cache first for performance
-                TreeNode? existingNode = null;
-                if (nodeCache.ContainsKey(currentPath))
-                {
-                    existingNode = nodeCache[currentPath];
-                }
-                else
-                {
-                    // Look for existing node in current level only
-                    foreach (TreeNode node in currentNodes)
-                    {
-                        if (node.Tag is S3FileItem nodeItem &&
-                            (nodeItem.Key == currentPath || nodeItem.Key == currentPath + "/"))
-                        {
-                            existingNode = node;
-                            nodeCache[currentPath] = node;
-                            break;
-                        }
-                    }
-                }
-
-                if (existingNode == null)
-                {
-                    // Create new node
-                    var nodeItem = new S3FileItem
-                    {
-                        Key = isFile ? currentPath : currentPath + "/",
-                        Size = isFile ? item.Size : 0,
-                        LastModified = item.LastModified,
-                        AccessRoles = item.AccessRoles
-                    };
-
-                    string displayText = isFile ?
-                        $"📄 {part} ({_fileService.FormatFileSize(item.Size)})" :
-                        $"📁 {part}";
-
-                    var newNode = new TreeNode(displayText)
-                    {
-                        Tag = nodeItem,
-                        Name = currentPath // Set name for easier searching
-                    };
-
-                    currentNodes.Add(newNode);
-                    nodeCache[currentPath] = newNode;
-                    existingNode = newNode;
-                }
-
-                if (!isLastPart)
-                {
-                    currentNodes = existingNode.Nodes;
-                }
-            }
-        }
+        // The old AddS3ItemToTreeOptimized is removed as its path-building logic is not used in lazy loading.
+        // The new AddSingleS3NodeToCollection and the logic within UpdateS3TreeViewOptimized and S3TreeView_BeforeExpand handle node creation.
 
         private List<S3FileItem> GetCheckedS3Items()
         {
@@ -461,46 +469,113 @@ namespace S3FileManager
 
         #region Sync Operations
 
-        private async Task SyncS3ToLocal(string localPath, ProgressForm progressForm)
+        private async Task<List<string>> SyncS3ToLocal(string localPath, string s3SourcePrefix, ProgressForm progressForm)
         {
-            // Get all accessible S3 files
-            var accessibleFiles = _s3Files.Where(f => !f.IsDirectory).ToList();
+            var extraLocalFiles = new List<string>();
 
-            if (accessibleFiles.Count == 0)
+            // --- Get Local Files (relative paths) ---
+            var localFileRelativePaths = new Dictionary<string, FileInfo>();
+            if (Directory.Exists(localPath))
             {
-                progressForm.UpdateMessage("No files to sync from S3.");
-                return;
+                // Ensure localPath ends with a separator for correct substring relative path calculation
+                string adjustedLocalPath = localPath.EndsWith(Path.DirectorySeparatorChar.ToString()) 
+                                           ? localPath 
+                                           : localPath + Path.DirectorySeparatorChar;
+
+                foreach (string filePath in Directory.EnumerateFiles(localPath, "*", SearchOption.AllDirectories))
+                {
+                    string fullPathNormalized = Path.GetFullPath(filePath); // Normalize for safety
+                    if (fullPathNormalized.StartsWith(adjustedLocalPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string relativeLocalPath = filePath.Substring(adjustedLocalPath.Length);
+                        localFileRelativePaths[relativeLocalPath] = new FileInfo(filePath);
+                    }
+                }
             }
 
-            for (int i = 0; i < accessibleFiles.Count; i++)
+            // --- Filter and Process S3 Files ---
+            var allS3Files = _s3Files.Where(f => !f.IsDirectory).ToList();
+            // Normalize s3SourcePrefix to ensure it ends with a '/' if it's not empty
+            string normalizedS3SourcePrefix = s3SourcePrefix;
+            if (!string.IsNullOrEmpty(normalizedS3SourcePrefix) && !normalizedS3SourcePrefix.EndsWith("/"))
             {
-                var s3File = accessibleFiles[i];
-                progressForm.UpdateMessage($"Syncing: {s3File.Key} ({i + 1}/{accessibleFiles.Count})");
+                normalizedS3SourcePrefix += "/";
+            }
+            // If s3SourcePrefix is empty, we want to match all files (root level sync)
+            // So, StartsWith("") is true for all strings.
+            // If s3SourcePrefix is "folder/", we only match keys starting with "folder/".
+            var relevantS3Files = string.IsNullOrEmpty(s3SourcePrefix) // Allow empty prefix for root
+                                  ? allS3Files 
+                                  : allS3Files.Where(f => f.Key.StartsWith(normalizedS3SourcePrefix)).ToList();
 
-                // Create local file path maintaining S3 folder structure
-                string localFilePath = Path.Combine(localPath, s3File.Key.Replace('/', Path.DirectorySeparatorChar));
-                string localFileDir = Path.GetDirectoryName(localFilePath) ?? localPath;
-
-                // Create directory if it doesn't exist
-                if (!Directory.Exists(localFileDir))
+            if (relevantS3Files.Count == 0)
+            {
+                progressForm.UpdateMessage($"No files found in S3 path: '{s3SourcePrefix}'. Checking for local files to remove...");
+                // All local files are extra if no S3 files are relevant
+                extraLocalFiles.AddRange(localFileRelativePaths.Values.Select(fi => fi.FullName));
+                progressForm.UpdateMessage("Sync process completed.");
+                return extraLocalFiles;
+            }
+            else
+            {
+                for (int i = 0; i < relevantS3Files.Count; i++)
                 {
-                    Directory.CreateDirectory(localFileDir);
-                }
+                    var s3File = relevantS3Files[i];
+                    // Ensure s3SourcePrefix is used for substring, not normalizedS3SourcePrefix if original was empty
+                    string relativeS3Path = s3File.Key.Substring(s3SourcePrefix.Length); 
+                    if (string.IsNullOrEmpty(relativeS3Path)) continue; // Skip if key was identical to prefix itself
 
-                // Check if file needs to be downloaded (doesn't exist or is older)
-                bool shouldDownload = !File.Exists(localFilePath);
-                if (!shouldDownload)
-                {
-                    var localFileInfo = new FileInfo(localFilePath);
-                    // Download if S3 file is newer or sizes don't match
-                    shouldDownload = localFileInfo.LastWriteTime < s3File.LastModified || localFileInfo.Length != s3File.Size;
-                }
+                    progressForm.UpdateMessage($"Syncing: {s3File.Key} ({i + 1}/{relevantS3Files.Count})");
 
-                if (shouldDownload)
-                {
-                    await _s3Service.DownloadFileAsync(s3File.Key, localFileDir);
+                    string localFilePath = Path.Combine(localPath, relativeS3Path.Replace('/', Path.DirectorySeparatorChar));
+                    string localFileDir = Path.GetDirectoryName(localFilePath) ?? localPath;
+
+                    if (!Directory.Exists(localFileDir))
+                    {
+                        Directory.CreateDirectory(localFileDir);
+                    }
+
+                    bool shouldDownload = true;
+                    // Key for localFileRelativePaths uses Path.DirectorySeparatorChar
+                    string localRelativePathKey = relativeS3Path.Replace('/', Path.DirectorySeparatorChar);
+                    if (localFileRelativePaths.TryGetValue(localRelativePathKey, out var localFileInfo))
+                    {
+                        if (localFileInfo.LastWriteTimeUtc >= s3File.LastModified.ToUniversalTime() && localFileInfo.Length == s3File.Size)
+                        {
+                            shouldDownload = false;
+                        }
+                    }
+
+                    if (shouldDownload)
+                    {
+                        progressForm.UpdateMessage($"Downloading: {s3File.Key}");
+                        await _s3Service.DownloadFileAsync(s3File.Key, localFileDir); // Pass full s3File.Key
+                        if (localFileRelativePaths.ContainsKey(localRelativePathKey))
+                        {
+                            localFileRelativePaths[localRelativePathKey].Refresh();
+                        }
+                        // If new, it's not "extra", so no need to add to localFileRelativePaths for this part
+                    }
                 }
             }
+
+            // --- Identify Extra Local Files ---
+            progressForm.UpdateMessage("Identifying extra local files...");
+            // These keys from S3 are like "file.txt" or "subfolder/file.txt"
+            var relevantS3RelativeKeys = new HashSet<string>(relevantS3Files.Select(f => f.Key.Substring(s3SourcePrefix.Length)));
+
+            foreach (var kvp in localFileRelativePaths)
+            {
+                // kvp.Key is like "file.txt" or "subfolder\file.txt"
+                string s3ComparableRelativePath = kvp.Key.Replace(Path.DirectorySeparatorChar, '/');
+                if (!relevantS3RelativeKeys.Contains(s3ComparableRelativePath))
+                {
+                    extraLocalFiles.Add(kvp.Value.FullName);
+                }
+            }
+            
+            progressForm.UpdateMessage("Sync process completed.");
+            return extraLocalFiles;
         }
 
         private async Task ApplyPermissionsRecursively(string folderKey, List<UserRole> roles, MetadataService metadataService)

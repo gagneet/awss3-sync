@@ -79,10 +79,103 @@ namespace S3FileManager
 
         private void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
         {
-            // Performance: Only expand if not already loaded
-            if (e.Node != null && e.Node.Nodes.Count == 1 && e.Node.Nodes[0].Text == "Loading...")
+            var node = e.Node;
+            if (node != null && node.Nodes.Count == 1 && node.Nodes[0].Text == "Loading...")
             {
-                // This would be implemented for lazy loading of S3 subfolders if needed
+                if (node.Tag is S3FileItem parentItem && parentItem.IsDirectory)
+                {
+                    var treeView = sender as TreeView;
+                    if (treeView == null) return;
+
+                    _isUpdatingTree = true; 
+                    treeView.BeginUpdate();
+                    node.Nodes.Clear(); // Remove "Loading..."
+
+                    string parentPrefix = parentItem.Key; 
+                    if (!parentPrefix.EndsWith("/")) parentPrefix += "/";
+
+                    var directChildrenKeys = new HashSet<string>();
+                    if (_s3Files != null)
+                    {
+                        foreach (var s3File in _s3Files)
+                        {
+                            if (s3File.Key.StartsWith(parentPrefix) && s3File.Key.Length > parentPrefix.Length)
+                            {
+                                string remainingPath = s3File.Key.Substring(parentPrefix.Length);
+                                var pathParts = remainingPath.Split(new[] {'/'}, StringSplitOptions.RemoveEmptyEntries);
+                                if (pathParts.Length > 0)
+                                {
+                                    string childName = pathParts[0];
+                                    // Determine if this child is a folder or a file based on the original key or if other files imply it's a folder
+                                    bool isActualDirectory = s3File.Key.EndsWith("/") || (pathParts.Length > 1);
+                                    // Or, if an explicit S3 object exists that is this prefix and is a directory
+                                    var explicitChildFolder = _s3Files.FirstOrDefault(f => f.Key == parentPrefix + childName + "/" && f.IsDirectory);
+                                    if (explicitChildFolder != null) isActualDirectory = true;
+                                    
+                                    string childFullKey = parentPrefix + childName + (isActualDirectory ? "/" : "");
+                                    directChildrenKeys.Add(childFullKey);
+                                }
+                            }
+                        }
+                    }
+            
+                    foreach (string childKey in directChildrenKeys.OrderBy(k => k))
+                    {
+                        S3FileItem childItem = _s3Files.FirstOrDefault(f => f.Key == childKey);
+                        bool isImplicitFolder = false;
+                        if (childItem == null && childKey.EndsWith("/")) // Implicit folder
+                        {
+                             childItem = new S3FileItem { Key = childKey, IsDirectory = true, Size = 0, LastModified = DateTime.MinValue };
+                             isImplicitFolder = true;
+                        }
+                        else if (childItem == null) // Implicit file - should be less common if keys are well-formed
+                        {
+                            childItem = new S3FileItem { Key = childKey, IsDirectory = false, Size = 0, LastModified = DateTime.MinValue };
+                        }
+
+                        // Ensure IsDirectory is accurate
+                        if (childKey.EndsWith("/") && !childItem.IsDirectory) childItem.IsDirectory = true;
+                        if (isImplicitFolder) childItem.IsDirectory = true;
+
+
+                        // Replicating AddSingleS3NodeToCollection's core logic here
+                        string displayName = childItem.Key.TrimEnd('/');
+                        if (displayName.Contains('/'))
+                        {
+                            displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
+                        }
+                        string nodeText = childItem.IsDirectory 
+                            ? $"📁 {displayName}" 
+                            : $"📄 {displayName} ({_fileService.FormatFileSize(childItem.Size)})";
+                        var childNode = new TreeNode(nodeText) { Tag = childItem, Name = childItem.Key };
+
+                        if (childItem.IsDirectory)
+                        {
+                            // Replicating S3FolderHasImmediateChildren's core logic here
+                            string grandChildPrefixToCheck = childItem.Key;
+                            if (!grandChildPrefixToCheck.EndsWith("/")) grandChildPrefixToCheck += "/";
+                            
+                            bool hasGrandChildren = false;
+                            if (_s3Files != null) 
+                            {
+                                hasGrandChildren = _s3Files.Any(f => {
+                                    if (!f.Key.StartsWith(grandChildPrefixToCheck) || f.Key == grandChildPrefixToCheck) return false;
+                                    string remainder = f.Key.Substring(grandChildPrefixToCheck.Length);
+                                    return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains('/');
+                                });
+                            }
+                            if (hasGrandChildren)
+                            {
+                                childNode.Nodes.Add(new TreeNode("Loading..."));
+                            }
+                        }
+                        node.Nodes.Add(childNode);
+                    }
+
+                    RestoreCheckedStates(node.Nodes, _s3CheckedItems, true); 
+                    treeView.EndUpdate();
+                    _isUpdatingTree = false;
+                }
             }
         }
 
@@ -268,23 +361,106 @@ namespace S3FileManager
                 else
                 {
                     // New sync: S3 to Local
-                    progressForm.UpdateMessage("Downloading S3 files to local folder...");
-                    await SyncS3ToLocal(_selectedLocalPath, progressForm);
+                    string s3SourcePrefix = "";
+                    var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+
+                    List<S3FileItem> checkedS3Folders = new List<S3FileItem>();
+                    if (_s3CheckedItems != null && _s3Files != null) // Ensure _s3Files is available
+                    {
+                        foreach (var kvp in _s3CheckedItems)
+                        {
+                            if (kvp.Value == true) // If checked
+                            {
+                                var s3Item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
+                                // A folder can be identified by ending with "/" or by IsDirectory flag
+                                if (s3Item != null && (s3Item.Key.EndsWith("/") || s3Item.IsDirectory))
+                                {
+                                    checkedS3Folders.Add(s3Item);
+                                }
+                            }
+                        }
+                    }
+
+                    if (checkedS3Folders.Count == 1)
+                    {
+                        var s3FolderItem = checkedS3Folders[0];
+                        s3SourcePrefix = s3FolderItem.Key;
+                        if (!s3SourcePrefix.EndsWith("/")) // Ensure trailing slash for prefix
+                        {
+                             // If IsDirectory is true but key somehow doesn't have a slash, add it.
+                             // Or if Key has slash but IsDirectory is false (less likely for folders), still treat as prefix.
+                            s3SourcePrefix = s3SourcePrefix.TrimEnd('/') + "/";
+                        }
+                    }
+                    else if (checkedS3Folders.Count > 1)
+                    {
+                        MessageBox.Show("Please check only one S3 folder to use as the source for the sync.", "Multiple S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        progressForm.Close(); // Close progress form as it was shown before this check
+                        return; // Abort sync
+                    }
+                    else // No S3 folders checked, or _s3CheckedItems/_s3Files is null. Fallback to SelectedNode.
+                    {
+                        if (s3TreeView != null && s3TreeView.SelectedNode != null)
+                        {
+                            var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
+                            if (s3Item != null)
+                            {
+                                if (s3Item.Key.EndsWith("/"))
+                                {
+                                    s3SourcePrefix = s3Item.Key;
+                                }
+                                else if (s3Item.IsDirectory)
+                                {
+                                    s3SourcePrefix = s3Item.Key.TrimEnd('/') + "/";
+                                }
+                                // If selected node is a file, s3SourcePrefix remains "" (sync all from root)
+                            }
+                        }
+                    }
+                    
+                    progressForm.UpdateMessage($"Downloading S3 files (from prefix '{s3SourcePrefix}') to local folder...");
+                    List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, s3SourcePrefix, progressForm);
+                    
+                    // Close progress form before showing messages
+                    progressForm.Close(); 
+
+                    if (extraLocalFiles != null && extraLocalFiles.Count != 0)
+                    {
+                        string fileList = string.Join(Environment.NewLine, extraLocalFiles.Select(f => $"- {f}"));
+                        string warningMessage = $"Sync complete. However, the following local files do not exist in the S3 bucket:{Environment.NewLine}{Environment.NewLine}{fileList}{Environment.NewLine}{Environment.NewLine}You may want to upload these files to S3 or remove them from your local folder if they are no longer needed.";
+                        MessageBox.Show(warningMessage, "Sync Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Sync completed successfully! No extra local files found.", "Success",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                 }
 
-                progressForm.Close();
-                MessageBox.Show("Sync completed successfully!", "Success",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Refresh both views - moved out of the specific S3 to Local block if progressForm was closed there
+                // If progressForm was closed inside the 'else', it should not be closed again in a finally block
+                // that might not be aware of the context.
+                // For now, assuming progressForm.Close() in the 'else' is sufficient before messages.
+                // If SyncS3ToLocal throws, progressForm might not be closed if not handled by a broader try/finally.
 
-                // Refresh both views
-                await LoadS3FilesAsync();
-                LoadLocalFiles(_selectedLocalPath);
+                // The original code had progressForm.Close() after both sync types, then messages.
+                // Let's ensure progressForm is closed before any message box.
+                // The current structure closes it within the 'else' block.
+                // If SyncLocalToS3 was chosen, progressForm.Close() is called before its success message.
+
+                await LoadS3FilesAsync(); // Refresh S3 view
+                LoadLocalFiles(_selectedLocalPath); // Refresh local view
             }
             catch (Exception ex)
             {
+                // Ensure progress form is closed in case of error if it's still open
+                var progressFormInstance = Application.OpenForms.OfType<ProgressForm>().FirstOrDefault();
+                progressFormInstance?.Close();
+
                 MessageBox.Show($"Error during sync: {ex.Message}", "Sync Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            // Removed finally block for progressForm.Close() as it's handled within try or specific logic paths.
         }
 
         private async void ListS3Button_Click(object? sender, EventArgs e)
@@ -425,9 +601,23 @@ namespace S3FileManager
             }
             catch (Exception ex)
             {
+                // Ensure progress form is closed in case of error if it's still open
+                // Check if progressForm variable is accessible and not null before trying to close
+                // For simplicity, accessing Application.OpenForms as a fallback.
+                var openProgressForm = Application.OpenForms.OfType<ProgressForm>().FirstOrDefault(pf => pf.Text == "Syncing files...");
+                if (openProgressForm != null)
+                {
+                    if (openProgressForm.InvokeRequired)
+                        openProgressForm.Invoke(new Action(() => openProgressForm.Close()));
+                    else
+                        openProgressForm.Close();
+                }
+
                 MessageBox.Show($"Error deleting files: {ex.Message}", "Delete Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            // Removed finally block for progressForm.Close() to avoid closing it if already closed.
+            // Refresh operations are now at the end of the try block.
         }
 
         private async void ManagePermissionsButton_Click(object? sender, EventArgs e)

@@ -67,6 +67,9 @@ namespace S3FileManager.Services
                 request.ContinuationToken = response.NextContinuationToken;
             } while (response.IsTruncated ?? false);
 
+            // Globally filter out any S3 objects under a root "logs/" folder
+            files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
+
             return FilterFilesForRole(files, userRole);
         }
 
