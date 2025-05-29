@@ -350,8 +350,69 @@ namespace S3FileManager
                     }
 
                     progressForm.UpdateMessage("Uploading local files to S3...");
-                    string folderName = Path.GetFileName(_selectedLocalPath);
-                    await _s3Service.UploadDirectoryAsync(_selectedLocalPath, folderName, roleForm.SelectedRoles);
+                    // string folderName = Path.GetFileName(_selectedLocalPath);
+
+                    string targetS3Prefix = "";
+                    var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+
+                    List<S3FileItem> checkedS3Folders = new List<S3FileItem>();
+                    if (_s3CheckedItems != null && _s3Files != null) // Ensure _s3Files is available
+                    {
+                        foreach (var kvp in _s3CheckedItems)
+                        {
+                            if (kvp.Value == true) // If checked
+                            {
+                                var s3Item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
+                                // If S3FileItem.IsDirectory is true, its Key must end with "/".
+                                if (s3Item != null && s3Item.IsDirectory)
+                                {
+                                    checkedS3Folders.Add(s3Item);
+                                }
+                            }
+                        }
+                    }
+
+                    if (checkedS3Folders.Count == 1)
+                    {
+                        var s3FolderItem = checkedS3Folders[0];
+                        // s3FolderItem.IsDirectory is true, so s3FolderItem.Key already ends with "/"
+                        targetS3Prefix = s3FolderItem.Key;
+                    }
+                    else if (checkedS3Folders.Count > 1)
+                    {
+                        MessageBox.Show("Please check only one S3 folder to use as the destination for the sync.", "Multiple S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        progressForm.Close(); // Close progress form
+                        return; // Abort sync
+                    }
+                    else // No S3 folders checked. Fallback to SelectedNode.
+                    {
+                        if (s3TreeView != null && s3TreeView.SelectedNode != null)
+                        {
+                            var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
+                            // If s3Item.IsDirectory is true, its Key must end with "/"
+                            if (s3Item != null && s3Item.IsDirectory)
+                            {
+                                targetS3Prefix = s3Item.Key;
+                            }
+                        }
+                    }
+
+                    // Crucially: If, after these checks, targetS3Prefix is still empty
+                    if (string.IsNullOrEmpty(targetS3Prefix))
+                    {
+                        MessageBox.Show("Please select or check a single S3 folder to be the destination.", "No Destination S3 Folder Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        progressForm.Close(); // Close progress form
+                        return; // Abort sync
+                    }
+                    
+                    // Ensure targetS3Prefix ends with a "/" if it's a non-empty prefix and represents a directory.
+                    // S3FileItem.Key for directories should already end with "/", so this might be redundant but safe.
+                    if (!string.IsNullOrEmpty(targetS3Prefix) && !targetS3Prefix.EndsWith("/"))
+                    {
+                        targetS3Prefix += "/";
+                    }
+
+                    await _s3Service.UploadDirectoryAsync(_selectedLocalPath, targetS3Prefix, roleForm.SelectedRoles);
                 }
                 else
                 {
