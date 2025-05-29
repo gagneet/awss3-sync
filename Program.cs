@@ -1,20 +1,22 @@
 using System;
 using System.Windows.Forms;
-using AWSS3Sync.UI; // Added using statement
 
-namespace AWSS3Sync // Root namespace can remain for Program.cs if desired
+namespace S3FileManager
 {
-    internal static class Program
+    public class Program
     {
-        /// <summary>
-        /// The main entry point for the application.
-        /// </summary>
         [STAThread]
-        static void Main()
+        public static void Main()
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new frmS3Sync()); // This will now correctly resolve to AWSS3Sync.UI.frmS3Sync
+
+            // Show login form first
+            var loginForm = new LoginForm();
+            if (loginForm.ShowDialog() == DialogResult.OK)
+            {
+                Application.Run(new MainForm(loginForm.CurrentUser!));
+            }
         }
     }
 }
