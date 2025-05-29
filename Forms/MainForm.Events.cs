@@ -420,56 +420,66 @@ namespace S3FileManager
                     string s3SourcePrefix = "";
                     var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
 
-                    List<S3FileItem> checkedS3Folders = new List<S3FileItem>();
-                    if (_s3CheckedItems != null && _s3Files != null) // Ensure _s3Files is available
+                    // Checked Folders Logic
+                    if (_s3CheckedItems != null && _s3Files != null) // Ensure _s3Files is available for explicit checks
                     {
-                        foreach (var kvp in _s3CheckedItems)
+                        List<string> currentCheckedKeys = _s3CheckedItems.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+
+                        if (currentCheckedKeys.Count == 1)
                         {
-                            if (kvp.Value == true) // If checked
+                            string checkedKey = currentCheckedKeys[0];
+                            var s3ItemFromCheckedKey = _s3Files.FirstOrDefault(f => f.Key == checkedKey);
+
+                            if (s3ItemFromCheckedKey != null && s3ItemFromCheckedKey.IsDirectory)
                             {
-                                var s3Item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
-                                // If S3FileItem.IsDirectory is true, its Key must end with "/".
-                                if (s3Item != null && s3Item.IsDirectory)
-                                {
-                                    checkedS3Folders.Add(s3Item);
-                                }
+                                s3SourcePrefix = s3ItemFromCheckedKey.Key;
+                            }
+                            else if (s3ItemFromCheckedKey == null && checkedKey.EndsWith("/")) // Implicit folder
+                            {
+                                s3SourcePrefix = checkedKey;
+                            }
+                        }
+                        else if (currentCheckedKeys.Count > 1)
+                        {
+                            MessageBox.Show("Please check only one S3 folder to use as the source for the sync.", "Multiple S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            progressForm.Close();
+                            return; // Abort sync
+                        }
+                    }
+
+                    // Selected Node Logic (if no single valid folder was checked)
+                    if (string.IsNullOrEmpty(s3SourcePrefix))
+                    {
+                        if (s3TreeView != null && s3TreeView.SelectedNode != null)
+                        {
+                            var selectedS3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
+                            if (selectedS3Item != null && selectedS3Item.IsDirectory)
+                            {
+                                s3SourcePrefix = selectedS3Item.Key;
                             }
                         }
                     }
 
-                    if (checkedS3Folders.Count == 1)
+                    // Final Validation (Crucial)
+                    if (string.IsNullOrEmpty(s3SourcePrefix))
                     {
-                        var s3FolderItem = checkedS3Folders[0];
-                        // s3FolderItem.IsDirectory is true, so s3FolderItem.Key already ends with "/"
-                        s3SourcePrefix = s3FolderItem.Key;
-                    }
-                    else if (checkedS3Folders.Count > 1)
-                    {
-                        MessageBox.Show("Please check only one S3 folder to use as the source for the sync.", "Multiple S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        progressForm.Close(); // Close progress form as it was shown before this check
+                        MessageBox.Show("Please select or check a single S3 folder to be the source for the sync. This folder's contents will be downloaded to your selected local path.", "No Source S3 Folder Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        progressForm.Close();
                         return; // Abort sync
                     }
-                    else // No S3 folders checked. Fallback to SelectedNode.
-                    {
-                        if (s3TreeView != null && s3TreeView.SelectedNode != null)
-                        {
-                            var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
-                            // If s3Item.IsDirectory is true, its Key must end with "/"
-                            if (s3Item != null && s3Item.IsDirectory)
-                            {
-                                s3SourcePrefix = s3Item.Key;
-                            }
-                            // If selected node is a file, or not an S3FileItem, s3SourcePrefix remains "" (sync all from root)
-                        }
-                        // Extra brace was here, it's now removed.
-                    } // This closes the "else // No S3 folders checked. Fallback to SelectedNode."
                     
-                    // This code is now correctly positioned within the S3-to-Local 'else' block
+                    // Ensure s3SourcePrefix ends with a "/" if it's a non-empty prefix and represents a directory.
+                    // This should generally be true if IsDirectory was true or key ended with "/" for implicit.
+                    if (!string.IsNullOrEmpty(s3SourcePrefix) && !s3SourcePrefix.EndsWith("/"))
+                    {
+                        s3SourcePrefix += "/";
+                    }
+
                     progressForm.UpdateMessage($"Downloading S3 files (from prefix '{s3SourcePrefix}') to local folder...");
                     List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, s3SourcePrefix, progressForm);
                     
                     // Close progress form before showing messages
-                    progressForm.Close(); 
+                    progressForm.Close();
 
                     if (extraLocalFiles != null && extraLocalFiles.Any())
                     {
