@@ -140,7 +140,7 @@ namespace S3FileManager
 
                         // Replicating AddSingleS3NodeToCollection's core logic here
                         string displayName = childItem.Key.TrimEnd('/');
-                        if (displayName.Contains("/"))
+                        if (displayName.Contains('/'))
                         {
                             displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
                         }
