@@ -244,7 +244,7 @@ namespace S3FileManager
             return _s3Files.Any(f => {
                 if (!f.Key.StartsWith(normalizedPrefix) || f.Key == normalizedPrefix) return false; 
                 string remainder = f.Key.Substring(normalizedPrefix.Length);
-                return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains("/"); 
+                return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains('/'); 
             });
         }
 
