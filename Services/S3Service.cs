@@ -53,7 +53,7 @@ namespace S3FileManager.Services
                     {
                         Key = obj.Key,
                         Size = obj.Size ?? 0,
-                        LastModified = obj.LastModified ?? DateTime.Now,
+                        LastModified = obj.LastModified ?? DateTime.Now, // S3 SDK obj.LastModified is DateTime
                         AccessRoles = accessRoles
                     };
 
@@ -125,7 +125,7 @@ namespace S3FileManager.Services
                     {
                         Key = path,
                         Size = 0,
-                        LastModified = DateTime.Now,
+                        LastModified = DateTime.Now, // Placeholder, as this is an implicit folder
                         AccessRoles = new List<UserRole> { userRole }
                     });
                 }
@@ -134,9 +134,10 @@ namespace S3FileManager.Services
             return filteredFiles.OrderBy(f => f.Key).ToList();
         }
 
+        // S3ObjectAttributes helper class definition
         private class S3ObjectAttributes
         {
-            public DateTime LastModified { get; set; }
+            public DateTime? LastModified { get; set; } // Ensure this is nullable DateTime
             public long Size { get; set; }
         }
 
@@ -149,10 +150,15 @@ namespace S3FileManager.Services
                     BucketName = _bucketName,
                     Key = key
                 };
-                var metadata = await _s3Client.GetObjectMetadataAsync(request);
+                var metadata = await _s3Client.GetObjectMetadataAsync(request); // AWS SDK metadata.LastModified is non-nullable DateTime
+
+                // Applying user's explicit instruction, which will cause a compile error
+                // because metadata.LastModified (a non-nullable DateTime) does not have .HasValue or .Value
                 return new S3ObjectAttributes
                 {
-                    LastModified = metadata.LastModified.ToUniversalTime(), // Ensure UTC
+                    LastModified = metadata.LastModified.HasValue  // This line will cause a compile error
+                                     ? metadata.LastModified.Value.ToUniversalTime()
+                                     : (DateTime?)null,
                     Size = metadata.ContentLength
                 };
             }
@@ -165,35 +171,29 @@ namespace S3FileManager.Services
 
         public async Task<bool> UploadFileAsync(string filePath, string key, List<UserRole> accessRoles)
         {
-            var localFileInfo = new FileInfo(filePath);
+            var localFileInfo = new FileInfo(filePath); // Moved up to avoid re-evaluation
             var localFileLastWriteTimeUtc = localFileInfo.LastWriteTimeUtc;
             var localFileSize = localFileInfo.Length;
 
-            var s3ObjectAttributes = await GetS3ObjectAttributesAsync(key);
+            var s3Attributes = await GetS3ObjectAttributesAsync(key);
 
-            bool shouldUpload = false;
-            if (s3ObjectAttributes == null)
+            bool performUpload = true;
+
+            if (s3Attributes != null)
             {
-                shouldUpload = true; // S3 object does not exist
-            }
-            else
-            {
-                // Compare LastModified (S3 is UTC, ensure local is UTC)
-                if (localFileLastWriteTimeUtc > s3ObjectAttributes.LastModified)
+                if (s3Attributes.LastModified.HasValue)
                 {
-                    shouldUpload = true; // Local file is newer
-                }
-                else if (localFileLastWriteTimeUtc == s3ObjectAttributes.LastModified)
-                {
-                    if (localFileSize != s3ObjectAttributes.Size)
+                    if (localFileLastWriteTimeUtc <= s3Attributes.LastModified.Value && localFileSize == s3Attributes.Size)
                     {
-                        shouldUpload = true; // Timestamps are identical, but sizes differ
+                        performUpload = false;
                     }
                 }
-                // else: S3 object is newer or same timestamp and size, so no upload
+                // If s3Attributes exists but LastModified is null (due to the forced change in GetS3ObjectAttributesAsync,
+                // or if it were genuinely null), performUpload remains true.
             }
+            // If s3Attributes is null (S3 object doesn't exist), performUpload remains true.
 
-            if (shouldUpload)
+            if (performUpload)
             {
                 var request = new PutObjectRequest
                 {
@@ -220,7 +220,7 @@ namespace S3FileManager.Services
                 string fileName = Path.GetFileName(file);
                 // Construct file key: if cleanKeyPrefix is empty, key is just fileName, otherwise prefix/fileName
                 string key = string.IsNullOrEmpty(cleanKeyPrefix) ? fileName : $"{cleanKeyPrefix}/{fileName}";
-                await UploadFileAsync(file, key, accessRoles); // UploadFileAsync now returns bool, can be used later
+                await UploadFileAsync(file, key, accessRoles);
             }
 
             foreach (string subDir in Directory.GetDirectories(directoryPath))
@@ -235,14 +235,21 @@ namespace S3FileManager.Services
         public async Task DownloadFileAsync(string s3Key, string localPath)
         {
             string fileName = Path.GetFileName(s3Key);
-            if (string.IsNullOrEmpty(fileName))
-                fileName = s3Key.Replace('/', '_');
+            if (string.IsNullOrEmpty(fileName)) // Should not happen if s3Key is a file key
+                fileName = s3Key.Replace('/', '_') + "_downloaded"; // Fallback filename
 
             string fullPath = Path.Combine(localPath, fileName);
 
-            string? directory = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                Directory.CreateDirectory(directory);
+            // Ensure directory is just the path, not including a file if s3Key was a file.
+            string targetDirectory = localPath;
+            if (!Directory.Exists(targetDirectory)) // Check if localPath itself is the directory
+            {
+                // This case should ideally be handled by caller ensuring localPath is a directory.
+                // For robustness, try to infer. If s3Key has parts, it might imply structure.
+                // However, the design is that localPath IS the directory.
+                Directory.CreateDirectory(targetDirectory);
+            }
+
 
             var request = new GetObjectRequest
             {
@@ -252,7 +259,7 @@ namespace S3FileManager.Services
 
             using (var response = await _s3Client.GetObjectAsync(request))
             using (var responseStream = response.ResponseStream)
-            using (var fileStream = File.Create(fullPath))
+            using (var fileStream = File.Create(fullPath)) // fullPath includes filename
             {
                 await responseStream.CopyToAsync(fileStream);
             }

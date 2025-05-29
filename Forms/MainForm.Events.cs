@@ -87,11 +87,11 @@ namespace S3FileManager
                     var treeView = sender as TreeView;
                     if (treeView == null) return;
 
-                    _isUpdatingTree = true; 
+                    _isUpdatingTree = true;
                     treeView.BeginUpdate();
                     node.Nodes.Clear(); // Remove "Loading..."
 
-                    string parentPrefix = parentItem.Key; 
+                    string parentPrefix = parentItem.Key;
                     if (!parentPrefix.EndsWith("/")) parentPrefix += "/";
 
                     var directChildrenKeys = new HashSet<string>();
@@ -102,7 +102,7 @@ namespace S3FileManager
                             if (s3File.Key.StartsWith(parentPrefix) && s3File.Key.Length > parentPrefix.Length)
                             {
                                 string remainingPath = s3File.Key.Substring(parentPrefix.Length);
-                                var pathParts = remainingPath.Split(new[] {'/'}, StringSplitOptions.RemoveEmptyEntries);
+                                var pathParts = remainingPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
                                 if (pathParts.Length > 0)
                                 {
                                     string childName = pathParts[0];
@@ -111,23 +111,23 @@ namespace S3FileManager
                                     // Or, if an explicit S3 object exists that is this prefix and is a directory
                                     var explicitChildFolder = _s3Files.FirstOrDefault(f => f.Key == parentPrefix + childName + "/" && f.IsDirectory);
                                     if (explicitChildFolder != null) isActualDirectory = true;
-                                    
+
                                     string childFullKey = parentPrefix + childName + (isActualDirectory ? "/" : "");
                                     directChildrenKeys.Add(childFullKey);
                                 }
                             }
                         }
                     }
-            
+
                     foreach (string childKey in directChildrenKeys.OrderBy(k => k))
                     {
-                        S3FileItem childItem = _s3Files.FirstOrDefault(f => f.Key == childKey);
+                        S3FileItem? childItem = _s3Files.FirstOrDefault(f => f.Key == childKey); // CS8600 addressed: childItem is S3FileItem?
                         // bool isImplicitFolder = false; // Not strictly needed if Key defines IsDirectory
                         if (childItem == null) // Implicit item (folder or file)
                         {
-                             // Key for childItem is childKey. S3FileItem's IsDirectory will be set based on childKey ending with "/"
-                             childItem = new S3FileItem { Key = childKey, Size = 0, LastModified = DateTime.MinValue };
-                             // isImplicitFolder = childKey.EndsWith("/"); // Can be used if needed for other logic
+                            // Key for childItem is childKey. S3FileItem's IsDirectory will be set based on childKey ending with "/"
+                            childItem = new S3FileItem { Key = childKey, Size = 0, LastModified = DateTime.MinValue };
+                            // isImplicitFolder = childKey.EndsWith("/"); // Can be used if needed for other logic
                         }
                         // No direct assignment to childItem.IsDirectory needed.
                         // The childFullKey logic (parentPrefix + childName + (isActualDirectory ? "/" : ""))
@@ -139,8 +139,8 @@ namespace S3FileManager
                         {
                             displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
                         }
-                        string nodeText = childItem.IsDirectory 
-                            ? $"📁 {displayName}" 
+                        string nodeText = childItem.IsDirectory
+                            ? $"📁 {displayName}"
                             : $"📄 {displayName} ({_fileService.FormatFileSize(childItem.Size)})";
                         var childNode = new TreeNode(nodeText) { Tag = childItem, Name = childItem.Key };
 
@@ -149,9 +149,9 @@ namespace S3FileManager
                             // Replicating S3FolderHasImmediateChildren's core logic here
                             string grandChildPrefixToCheck = childItem.Key;
                             if (!grandChildPrefixToCheck.EndsWith("/")) grandChildPrefixToCheck += "/";
-                            
+
                             bool hasGrandChildren = false;
-                            if (_s3Files != null) 
+                            if (_s3Files != null)
                             {
                                 hasGrandChildren = _s3Files.Any(f => {
                                     if (!f.Key.StartsWith(grandChildPrefixToCheck) || f.Key == grandChildPrefixToCheck) return false;
@@ -167,7 +167,7 @@ namespace S3FileManager
                         node.Nodes.Add(childNode);
                     }
 
-                    RestoreCheckedStates(node.Nodes, _s3CheckedItems, true); 
+                    RestoreCheckedStates(node.Nodes, _s3CheckedItems, true);
                     treeView.EndUpdate();
                     _isUpdatingTree = false;
                 }
@@ -425,7 +425,7 @@ namespace S3FileManager
                 {
                     progressForm.UpdateMessage($"Downloading S3 files (from prefix '{selectedS3FolderKey}') to local folder...");
                     List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, selectedS3FolderKey, progressForm);
-                    
+
                     // Specific S3ToLocal handling with extra files message
                     progressForm.Close(); // Close before message
                     progressForm = null; // Indicate it's closed
@@ -449,8 +449,8 @@ namespace S3FileManager
                     MessageBox.Show("Sync completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
 
-                await LoadS3FilesAsync(); 
-                LoadLocalFiles(_selectedLocalPath); 
+                await LoadS3FilesAsync();
+                LoadLocalFiles(_selectedLocalPath);
             }
             catch (Exception ex)
             {
