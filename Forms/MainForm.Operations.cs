@@ -127,7 +127,7 @@ namespace S3FileManager
             // Addressing: Possible null reference argument for parameter 'source' if _localFiles could be null.
             // Also noting that _localFiles is not a defined field in the provided MainForm snippets,
             // which is a separate issue. Assuming it *should* exist for this fix.
-            if (_localFiles == null) 
+            if (_localFiles == null)
             {
                 // If there's no source list, we can't find items in it.
                 // Depending on expected behavior, one might still iterate _localCheckedItems
@@ -141,17 +141,17 @@ namespace S3FileManager
                 // This fix assumes it *is* a member for the purpose of the warning.
                 // If it's not, then `_localFiles.FirstOrDefault` is a compile error, not a warning.
                 // Given the context of fixing warnings, I'll add the guard.
-                 return items; // Or, if _localFiles is essential, throw or handle error.
-                               // The current fallback of creating from path if item not in _localFiles suggests
-                               // that _localFiles might be a cache or a primary list.
-                               // Let's assume it could be null and we should proceed to the fallback.
-                               // So, if _localFiles is null, every item will be "not found" and created from path.
-                               // This makes the `if (_localFiles == null) return items;` less useful if the fallback is always desired.
-                               // The most direct fix for the warning *if _localFiles is the source of FirstOrDefault*
-                               // is to ensure _localFiles is not null.
-                               // The existing code structure implies _localFiles is a List<LocalFileItem>.
-                               // Let's assume it's a field that should be initialized.
-                               // if (_localFiles == null) _localFiles = new List<LocalFileItem>(); // Alternative
+                return items; // Or, if _localFiles is essential, throw or handle error.
+                              // The current fallback of creating from path if item not in _localFiles suggests
+                              // that _localFiles might be a cache or a primary list.
+                              // Let's assume it could be null and we should proceed to the fallback.
+                              // So, if _localFiles is null, every item will be "not found" and created from path.
+                              // This makes the `if (_localFiles == null) return items;` less useful if the fallback is always desired.
+                              // The most direct fix for the warning *if _localFiles is the source of FirstOrDefault*
+                              // is to ensure _localFiles is not null.
+                              // The existing code structure implies _localFiles is a List<LocalFileItem>.
+                              // Let's assume it's a field that should be initialized.
+                              // if (_localFiles == null) _localFiles = new List<LocalFileItem>(); // Alternative
             }
 
 
@@ -268,14 +268,14 @@ namespace S3FileManager
         // Helper to determine if an S3 item (given its key, which should be a folder prefix) has immediate children
         private bool S3FolderHasImmediateChildren(string folderKeyPrefix)
         {
-            if (string.IsNullOrEmpty(folderKeyPrefix)) return false; 
-            
+            if (string.IsNullOrEmpty(folderKeyPrefix)) return false;
+
             string normalizedPrefix = folderKeyPrefix.EndsWith("/") ? folderKeyPrefix : folderKeyPrefix + "/";
 
             return _s3Files.Any(f => {
-                if (!f.Key.StartsWith(normalizedPrefix) || f.Key == normalizedPrefix) return false; 
+                if (!f.Key.StartsWith(normalizedPrefix) || f.Key == normalizedPrefix) return false;
                 string remainder = f.Key.Substring(normalizedPrefix.Length);
-                return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains("/"); 
+                return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains("/");
             });
         }
 
@@ -289,14 +289,14 @@ namespace S3FileManager
                 displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
             }
 
-            string nodeText = item.IsDirectory 
-                ? $"📁 {displayName}" 
+            string nodeText = item.IsDirectory
+                ? $"📁 {displayName}"
                 : $"📄 {displayName} ({_fileService.FormatFileSize(item.Size)})";
 
             var newNode = new TreeNode(nodeText)
             {
                 Tag = item,
-                Name = item.Key 
+                Name = item.Key
             };
 
             if (item.IsDirectory && addDummyNodeIfFolderHasChildren)
@@ -308,7 +308,7 @@ namespace S3FileManager
             }
             parentNodes.Add(newNode);
         }
-        
+
         private void UpdateS3TreeViewOptimized()
         {
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
@@ -321,7 +321,7 @@ namespace S3FileManager
             {
                 var expandedNodes = new HashSet<string>();
                 StoreExpandedStates(s3TreeView.Nodes, expandedNodes);
-                
+
                 s3TreeView.Nodes.Clear();
 
                 if (_s3Files == null) _s3Files = new List<S3FileItem>();
@@ -329,7 +329,7 @@ namespace S3FileManager
                 var topLevelKeys = new HashSet<string>();
                 foreach (var s3File in _s3Files)
                 {
-                    var keyParts = s3File.Key.Split(new[] {'/'}, StringSplitOptions.RemoveEmptyEntries);
+                    var keyParts = s3File.Key.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
                     if (keyParts.Length > 0)
                     {
                         string firstPart = keyParts[0];
@@ -341,11 +341,11 @@ namespace S3FileManager
                         topLevelKeys.Add(topLevelKey);
                     }
                 }
-                
+
                 foreach (string topKey in topLevelKeys.OrderBy(k => k))
                 {
-                    S3FileItem topLevelItem = _s3Files.FirstOrDefault(f => f.Key == topKey);
-                    
+                    S3FileItem? topLevelItem = _s3Files.FirstOrDefault(f => f.Key == topKey); // CS8600 addressed: topLevelItem is S3FileItem?
+
                     // If topKey represents an item not explicitly in _s3Files (e.g., an implicit folder)
                     if (topLevelItem == null)
                     {
@@ -360,7 +360,7 @@ namespace S3FileManager
 
                     AddSingleS3NodeToCollection(s3TreeView.Nodes, topLevelItem, true); // true: addDummyNodeIfFolderHasChildren
                 }
-                
+
                 RestoreExpandedStates(s3TreeView.Nodes, expandedNodes);
                 RestoreCheckedStates(s3TreeView.Nodes, _s3CheckedItems, true); // true for S3 items
 
@@ -577,8 +577,8 @@ namespace S3FileManager
             if (Directory.Exists(localPath))
             {
                 // Ensure localPath ends with a separator for correct substring relative path calculation
-                string adjustedLocalPath = localPath.EndsWith(Path.DirectorySeparatorChar.ToString()) 
-                                           ? localPath 
+                string adjustedLocalPath = localPath.EndsWith(Path.DirectorySeparatorChar.ToString())
+                                           ? localPath
                                            : localPath + Path.DirectorySeparatorChar;
 
                 foreach (string filePath in Directory.EnumerateFiles(localPath, "*", SearchOption.AllDirectories))
@@ -604,7 +604,7 @@ namespace S3FileManager
             // So, StartsWith("") is true for all strings.
             // If s3SourcePrefix is "folder/", we only match keys starting with "folder/".
             var relevantS3Files = string.IsNullOrEmpty(s3SourcePrefix) // Allow empty prefix for root
-                                  ? allS3Files 
+                                  ? allS3Files
                                   : allS3Files.Where(f => f.Key.StartsWith(normalizedS3SourcePrefix)).ToList();
 
             if (relevantS3Files.Count == 0)
@@ -621,7 +621,7 @@ namespace S3FileManager
                 {
                     var s3File = relevantS3Files[i];
                     // Ensure s3SourcePrefix is used for substring, not normalizedS3SourcePrefix if original was empty
-                    string relativeS3Path = s3File.Key.Substring(s3SourcePrefix.Length); 
+                    string relativeS3Path = s3File.Key.Substring(s3SourcePrefix.Length);
                     if (string.IsNullOrEmpty(relativeS3Path)) continue; // Skip if key was identical to prefix itself
 
                     progressForm.UpdateMessage($"Syncing: {s3File.Key} ({i + 1}/{relevantS3Files.Count})");
@@ -672,9 +672,10 @@ namespace S3FileManager
                     extraLocalFiles.Add(kvp.Value.FullName);
                 }
             }
-            
+
             progressForm.UpdateMessage("Sync process completed.");
             return extraLocalFiles;
+        }
 
         private async Task SyncS3ToLocal(string localPath, ProgressForm progressForm)
         {
@@ -730,7 +731,7 @@ namespace S3FileManager
         }
 
         #endregion
-        
-        private TableLayoutPanel mainPanel;
+
+        private TableLayoutPanel? mainPanel; // Made nullable to address CS8618
     }
 }
