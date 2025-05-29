@@ -79,10 +79,103 @@ namespace S3FileManager
 
         private void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
         {
-            // Performance: Only expand if not already loaded
-            if (e.Node != null && e.Node.Nodes.Count == 1 && e.Node.Nodes[0].Text == "Loading...")
+            var node = e.Node;
+            if (node != null && node.Nodes.Count == 1 && node.Nodes[0].Text == "Loading...")
             {
-                // This would be implemented for lazy loading of S3 subfolders if needed
+                if (node.Tag is S3FileItem parentItem && parentItem.IsDirectory)
+                {
+                    var treeView = sender as TreeView;
+                    if (treeView == null) return;
+
+                    _isUpdatingTree = true; 
+                    treeView.BeginUpdate();
+                    node.Nodes.Clear(); // Remove "Loading..."
+
+                    string parentPrefix = parentItem.Key; 
+                    if (!parentPrefix.EndsWith("/")) parentPrefix += "/";
+
+                    var directChildrenKeys = new HashSet<string>();
+                    if (_s3Files != null)
+                    {
+                        foreach (var s3File in _s3Files)
+                        {
+                            if (s3File.Key.StartsWith(parentPrefix) && s3File.Key.Length > parentPrefix.Length)
+                            {
+                                string remainingPath = s3File.Key.Substring(parentPrefix.Length);
+                                var pathParts = remainingPath.Split(new[] {'/'}, StringSplitOptions.RemoveEmptyEntries);
+                                if (pathParts.Length > 0)
+                                {
+                                    string childName = pathParts[0];
+                                    // Determine if this child is a folder or a file based on the original key or if other files imply it's a folder
+                                    bool isActualDirectory = s3File.Key.EndsWith("/") || (pathParts.Length > 1);
+                                    // Or, if an explicit S3 object exists that is this prefix and is a directory
+                                    var explicitChildFolder = _s3Files.FirstOrDefault(f => f.Key == parentPrefix + childName + "/" && f.IsDirectory);
+                                    if (explicitChildFolder != null) isActualDirectory = true;
+                                    
+                                    string childFullKey = parentPrefix + childName + (isActualDirectory ? "/" : "");
+                                    directChildrenKeys.Add(childFullKey);
+                                }
+                            }
+                        }
+                    }
+            
+                    foreach (string childKey in directChildrenKeys.OrderBy(k => k))
+                    {
+                        S3FileItem childItem = _s3Files.FirstOrDefault(f => f.Key == childKey);
+                        bool isImplicitFolder = false;
+                        if (childItem == null && childKey.EndsWith("/")) // Implicit folder
+                        {
+                             childItem = new S3FileItem { Key = childKey, IsDirectory = true, Size = 0, LastModified = DateTime.MinValue };
+                             isImplicitFolder = true;
+                        }
+                        else if (childItem == null) // Implicit file - should be less common if keys are well-formed
+                        {
+                            childItem = new S3FileItem { Key = childKey, IsDirectory = false, Size = 0, LastModified = DateTime.MinValue };
+                        }
+
+                        // Ensure IsDirectory is accurate
+                        if (childKey.EndsWith("/") && !childItem.IsDirectory) childItem.IsDirectory = true;
+                        if (isImplicitFolder) childItem.IsDirectory = true;
+
+
+                        // Replicating AddSingleS3NodeToCollection's core logic here
+                        string displayName = childItem.Key.TrimEnd('/');
+                        if (displayName.Contains("/"))
+                        {
+                            displayName = displayName.Substring(displayName.LastIndexOf('/') + 1);
+                        }
+                        string nodeText = childItem.IsDirectory 
+                            ? $"📁 {displayName}" 
+                            : $"📄 {displayName} ({_fileService.FormatFileSize(childItem.Size)})";
+                        var childNode = new TreeNode(nodeText) { Tag = childItem, Name = childItem.Key };
+
+                        if (childItem.IsDirectory)
+                        {
+                            // Replicating S3FolderHasImmediateChildren's core logic here
+                            string grandChildPrefixToCheck = childItem.Key;
+                            if (!grandChildPrefixToCheck.EndsWith("/")) grandChildPrefixToCheck += "/";
+                            
+                            bool hasGrandChildren = false;
+                            if (_s3Files != null) 
+                            {
+                                hasGrandChildren = _s3Files.Any(f => {
+                                    if (!f.Key.StartsWith(grandChildPrefixToCheck) || f.Key == grandChildPrefixToCheck) return false;
+                                    string remainder = f.Key.Substring(grandChildPrefixToCheck.Length);
+                                    return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains("/");
+                                });
+                            }
+                            if (hasGrandChildren)
+                            {
+                                childNode.Nodes.Add(new TreeNode("Loading..."));
+                            }
+                        }
+                        node.Nodes.Add(childNode);
+                    }
+
+                    RestoreCheckedStates(node.Nodes, _s3CheckedItems, true); 
+                    treeView.EndUpdate();
+                    _isUpdatingTree = false;
+                }
             }
         }
 
