@@ -161,7 +161,7 @@ namespace S3FileManager
                                 hasGrandChildren = _s3Files.Any(f => {
                                     if (!f.Key.StartsWith(grandChildPrefixToCheck) || f.Key == grandChildPrefixToCheck) return false;
                                     string remainder = f.Key.Substring(grandChildPrefixToCheck.Length);
-                                    return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains("/");
+                                    return !string.IsNullOrEmpty(remainder) && !remainder.TrimEnd('/').Contains('/');
                                 });
                             }
                             if (hasGrandChildren)
