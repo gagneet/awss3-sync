@@ -344,7 +344,7 @@ namespace S3FileManager
                 
                 foreach (string topKey in topLevelKeys.OrderBy(k => k))
                 {
-                    S3FileItem topLevelItem = _s3Files.FirstOrDefault(f => f.Key == topKey);
+                    S3FileItem? topLevelItem = _s3Files.FirstOrDefault(f => f.Key == topKey); // CS8600 addressed: topLevelItem is S3FileItem?
                     
                     // If topKey represents an item not explicitly in _s3Files (e.g., an implicit folder)
                     if (topLevelItem == null)
@@ -731,6 +731,6 @@ namespace S3FileManager
 
         #endregion
         
-        private TableLayoutPanel mainPanel;
+        private TableLayoutPanel? mainPanel; // Made nullable to address CS8618
     }
 }

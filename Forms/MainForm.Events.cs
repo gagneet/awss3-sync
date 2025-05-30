@@ -121,7 +121,7 @@ namespace S3FileManager
             
                     foreach (string childKey in directChildrenKeys.OrderBy(k => k))
                     {
-                        S3FileItem childItem = _s3Files.FirstOrDefault(f => f.Key == childKey);
+                        S3FileItem? childItem = _s3Files.FirstOrDefault(f => f.Key == childKey); // CS8600 addressed: childItem is S3FileItem?
                         // bool isImplicitFolder = false; // Not strictly needed if Key defines IsDirectory
                         if (childItem == null) // Implicit item (folder or file)
                         {
@@ -310,105 +310,125 @@ namespace S3FileManager
         {
             if (_currentUser.Role != UserRole.Administrator)
             {
-                MessageBox.Show("Only administrators can sync folders.", "Access Denied",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Only administrators can sync folders.", "Access Denied", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
+            // 1. Local Folder Identification
             if (string.IsNullOrEmpty(_selectedLocalPath))
             {
-                MessageBox.Show("Please browse and select a local folder first before syncing.", "No Local Folder Selected",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Please browse and select a valid local folder for synchronization.", "No Local Folder Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning); // Slightly refined
                 return;
             }
-
             if (!Directory.Exists(_selectedLocalPath))
             {
-                MessageBox.Show("The selected local folder no longer exists. Please browse and select a valid folder.", "Invalid Local Folder",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("The selected local folder no longer exists. Please browse and select a valid folder for synchronization.", "Invalid Local Folder", MessageBoxButtons.OK, MessageBoxIcon.Error); // Slightly refined
                 return;
             }
 
-            // Show sync direction dialog
+            // 2. S3 Folder Identification
+            string selectedS3FolderKey = "";
+            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+
+            string selectedNodeCandidateKey = "";
+            if (s3TreeView?.SelectedNode?.Tag is S3FileItem selectedS3Item && selectedS3Item.IsDirectory)
+            {
+                selectedNodeCandidateKey = selectedS3Item.Key;
+            }
+
+            string finalCheckedFolderCandidateKey = "";
+            if (_s3CheckedItems != null && _s3Files != null)
+            {
+                List<string> allCheckedKeys = _s3CheckedItems.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+                List<string> potentialTopMostCheckedFolderKeys = new List<string>();
+
+                foreach (string key in allCheckedKeys)
+                {
+                    var s3Item = _s3Files.FirstOrDefault(f => f.Key == key);
+                    bool isDirectoryCandidate = (s3Item != null && s3Item.IsDirectory) || (s3Item == null && key.EndsWith("/"));
+
+                    if (isDirectoryCandidate)
+                    {
+                        bool isTopMost = !allCheckedKeys.Any(otherKey => key != otherKey && key.StartsWith(otherKey));
+                        if (isTopMost)
+                        {
+                            potentialTopMostCheckedFolderKeys.Add(key);
+                        }
+                    }
+                }
+                potentialTopMostCheckedFolderKeys = potentialTopMostCheckedFolderKeys.Distinct().ToList();
+
+                if (potentialTopMostCheckedFolderKeys.Count == 1)
+                {
+                    finalCheckedFolderCandidateKey = potentialTopMostCheckedFolderKeys[0];
+                }
+                else if (potentialTopMostCheckedFolderKeys.Count > 1)
+                {
+                    MessageBox.Show("Multiple distinct S3 folders are checked. Please check only one main S3 folder to be the target/source for synchronization.", "Ambiguous S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning); // Refined
+                    return;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(selectedNodeCandidateKey) && !string.IsNullOrEmpty(finalCheckedFolderCandidateKey))
+            {
+                if (selectedNodeCandidateKey != finalCheckedFolderCandidateKey)
+                {
+                    MessageBox.Show("The S3 folder selected in the tree conflicts with the primary S3 folder that is checked. Please clarify the intended S3 folder by ensuring only one is designated (either by selection or by a single top-most check).", "Conflicting S3 Folders", MessageBoxButtons.OK, MessageBoxIcon.Warning); // Refined
+                    return;
+                }
+                selectedS3FolderKey = selectedNodeCandidateKey; // They are the same
+            }
+            else if (!string.IsNullOrEmpty(selectedNodeCandidateKey))
+            {
+                selectedS3FolderKey = selectedNodeCandidateKey;
+            }
+            else if (!string.IsNullOrEmpty(finalCheckedFolderCandidateKey))
+            {
+                selectedS3FolderKey = finalCheckedFolderCandidateKey;
+            }
+
+            if (string.IsNullOrEmpty(selectedS3FolderKey))
+            {
+                MessageBox.Show("Please select or check a single S3 folder to be the target/source for synchronization.", "No S3 Folder Designated", MessageBoxButtons.OK, MessageBoxIcon.Warning); // Refined
+                return;
+            }
+
+            if (!selectedS3FolderKey.EndsWith("/"))
+            {
+                selectedS3FolderKey += "/"; // Ensure it's a prefix
+            }
+
+            // 3. Proceed to Sync Direction Dialog
             var syncForm = new SyncDirectionForm();
             if (syncForm.ShowDialog() != DialogResult.OK)
                 return;
 
+            ProgressForm? progressForm = null; // Declare here to be accessible in catch/finally
             try
             {
-                var progressForm = new ProgressForm("Syncing files...");
+                progressForm = new ProgressForm("Syncing files...");
                 progressForm.Show();
 
                 if (syncForm.SyncDirection == SyncDirection.LocalToS3)
                 {
-                    // Original sync: Local to S3
                     var roleForm = new RoleSelectionForm();
                     if (roleForm.ShowDialog() != DialogResult.OK)
                     {
-                        progressForm.Close();
+                        progressForm?.Close(); // Ensure progress form is closed
                         return;
                     }
-
                     progressForm.UpdateMessage("Uploading local files to S3...");
-                    string folderName = Path.GetFileName(_selectedLocalPath);
-                    await _s3Service.UploadDirectoryAsync(_selectedLocalPath, folderName, roleForm.SelectedRoles);
+                    await _s3Service.UploadDirectoryAsync(_selectedLocalPath, selectedS3FolderKey, roleForm.SelectedRoles);
+                    // No separate message for LocalToS3 success, will be handled by the generic success message after refresh
                 }
-                else
+                else // SyncDirection.S3ToLocal
                 {
-                    // New sync: S3 to Local
-                    string s3SourcePrefix = "";
-                    var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
-
-                    List<S3FileItem> checkedS3Folders = new List<S3FileItem>();
-                    if (_s3CheckedItems != null && _s3Files != null) // Ensure _s3Files is available
-                    {
-                        foreach (var kvp in _s3CheckedItems)
-                        {
-                            if (kvp.Value == true) // If checked
-                            {
-                                var s3Item = _s3Files.FirstOrDefault(f => f.Key == kvp.Key);
-                                // If S3FileItem.IsDirectory is true, its Key must end with "/".
-                                if (s3Item != null && s3Item.IsDirectory)
-                                {
-                                    checkedS3Folders.Add(s3Item);
-                                }
-                            }
-                        }
-                    }
-
-                    if (checkedS3Folders.Count == 1)
-                    {
-                        var s3FolderItem = checkedS3Folders[0];
-                        // s3FolderItem.IsDirectory is true, so s3FolderItem.Key already ends with "/"
-                        s3SourcePrefix = s3FolderItem.Key;
-                    }
-                    else if (checkedS3Folders.Count > 1)
-                    {
-                        MessageBox.Show("Please check only one S3 folder to use as the source for the sync.", "Multiple S3 Folders Checked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        progressForm.Close(); // Close progress form as it was shown before this check
-                        return; // Abort sync
-                    }
-                    else // No S3 folders checked. Fallback to SelectedNode.
-                    {
-                        if (s3TreeView != null && s3TreeView.SelectedNode != null)
-                        {
-                            var s3Item = s3TreeView.SelectedNode.Tag as S3FileItem;
-                            // If s3Item.IsDirectory is true, its Key must end with "/"
-                            if (s3Item != null && s3Item.IsDirectory)
-                            {
-                                s3SourcePrefix = s3Item.Key;
-                            }
-                            // If selected node is a file, or not an S3FileItem, s3SourcePrefix remains "" (sync all from root)
-                        }
-                        // Extra brace was here, it's now removed.
-                    } // This closes the "else // No S3 folders checked. Fallback to SelectedNode."
+                    progressForm.UpdateMessage($"Downloading S3 files (from prefix '{selectedS3FolderKey}') to local folder...");
+                    List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, selectedS3FolderKey, progressForm);
                     
-                    // This code is now correctly positioned within the S3-to-Local 'else' block
-                    progressForm.UpdateMessage($"Downloading S3 files (from prefix '{s3SourcePrefix}') to local folder...");
-                    List<string> extraLocalFiles = await SyncS3ToLocal(_selectedLocalPath, s3SourcePrefix, progressForm);
-                    
-                    // Close progress form before showing messages
-                    progressForm.Close(); 
+                    // Specific S3ToLocal handling with extra files message
+                    progressForm.Close(); // Close before message
+                    progressForm = null; // Indicate it's closed
 
                     if (extraLocalFiles != null && extraLocalFiles.Any())
                     {
@@ -418,35 +438,25 @@ namespace S3FileManager
                     }
                     else
                     {
-                        MessageBox.Show("Sync completed successfully! No extra local files found.", "Success",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show("Sync completed successfully! No extra local files found.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 }
 
-                // Refresh both views - moved out of the specific S3 to Local block if progressForm was closed there
-                // If progressForm was closed inside the 'else', it should not be closed again in a finally block
-                // that might not be aware of the context.
-                // For now, assuming progressForm.Close() in the 'else' is sufficient before messages.
-                // If SyncS3ToLocal throws, progressForm might not be closed if not handled by a broader try/finally.
+                // Generic success message if not S3ToLocal with its specific messages
+                if (progressForm != null) // Was not closed by S3ToLocal logic
+                {
+                    progressForm.Close();
+                    MessageBox.Show("Sync completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
 
-                // The original code had progressForm.Close() after both sync types, then messages.
-                // Let's ensure progressForm is closed before any message box.
-                // The current structure closes it within the 'else' block.
-                // If SyncLocalToS3 was chosen, progressForm.Close() is called before its success message.
-
-                await LoadS3FilesAsync(); // Refresh S3 view
-                LoadLocalFiles(_selectedLocalPath); // Refresh local view
+                await LoadS3FilesAsync(); 
+                LoadLocalFiles(_selectedLocalPath); 
             }
             catch (Exception ex)
             {
-                // Ensure progress form is closed in case of error if it's still open
-                var progressFormInstance = Application.OpenForms.OfType<ProgressForm>().FirstOrDefault();
-                progressFormInstance?.Close();
-
-                MessageBox.Show($"Error during sync: {ex.Message}", "Sync Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                progressForm?.Close(); // Ensure progress form is closed on error
+                MessageBox.Show($"Error during sync: {ex.Message}", "Sync Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            // Removed finally block for progressForm.Close() as it's handled within try or specific logic paths.
         }
 
         private async void ListS3Button_Click(object? sender, EventArgs e)
