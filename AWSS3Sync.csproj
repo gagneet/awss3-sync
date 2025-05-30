@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.Core" Version="4.0.0.6" />
-    <PackageReference Include="AWSSDK.S3" Version="4.0.0.7" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.1" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Abstractions" Version="9.0.5" />
