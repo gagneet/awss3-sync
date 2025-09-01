@@ -373,6 +373,76 @@ try
                 }
                 
                 // Set file timestamps to match S3
+// Import System.Security for SecurityException
+        // This is used to throw a security exception when an invalid file path is detected
+        using System.Security;
+
+        public async Task DownloadFileAsync(string s3Key, string localPath, 
+            IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            await _downloadSemaphore.WaitAsync(cancellationToken);
+            
+            try
+            {
+                var fileName = Path.GetFileName(s3Key);
+                var fullPath = Path.Combine(localPath, fileName);
+
+                // Validate the file path
+                if (!fullPath.StartsWith(Path.GetFullPath(localPath)) || fullPath.Contains(".."))
+                {
+                    throw new SecurityException("Invalid file path detected.");
+                }
+                
+                // Create directory if it doesn't exist
+                Directory.CreateDirectory(localPath);
+                
+                // Get object metadata
+                var metadataRequest = new GetObjectMetadataRequest
+                {
+                    BucketName = _bucketName,
+                    Key = s3Key
+                };
+                
+                var metadata = await _s3Client.GetObjectMetadataAsync(metadataRequest, cancellationToken);
+                
+                // Use transfer utility for optimized download
+                if (metadata.ContentLength > _performanceConfig.ChunkSizeBytes)
+                {
+                    var downloadRequest = new TransferUtilityDownloadRequest
+                    {
+                        BucketName = _bucketName,
+                        Key = s3Key,
+                        FilePath = fullPath
+                    };
+                    
+                    // Track download progress
+                    if (progress != null)
+                    {
+                        downloadRequest.WriteObjectProgressEvent += (sender, args) =>
+                        {
+                            progress.Report((double)args.TransferredBytes / args.TotalBytes * 100);
+                        };
+                    }
+                    
+                    await _transferUtility.DownloadAsync(downloadRequest, cancellationToken);
+                }
+                else
+                {
+                    // Use simple download for small files
+                    var getRequest = new GetObjectRequest
+                    {
+                        BucketName = _bucketName,
+                        Key = s3Key
+                    };
+                    
+                    using (var response = await _s3Client.GetObjectAsync(getRequest, cancellationToken))
+                    using (var fileStream = File.Create(fullPath))
+                    {
+                        await response.ResponseStream.CopyToAsync(fileStream, 81920, cancellationToken);
+                    }
+                }
+                
+                // Set file timestamps to match S3
                 File.SetLastWriteTimeUtc(fullPath, metadata.LastModified.ToUniversalTime());
             }
             finally
