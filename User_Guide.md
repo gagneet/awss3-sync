@@ -15,8 +15,9 @@ Welcome to the AWS S3 Sync Utility! This guide will walk you through installatio
 7. [Uploading, Downloading & Deleting Files](#7-uploading-downloading--deleting-files)  
 8. [Syncing Files](#8-syncing-files)  
 9. [Managing Permissions & Tagging](#9-managing-permissions--tagging)  
-10. [Troubleshooting](#10-troubleshooting)  
-11. [Need Help?](#need-help)
+10. [First-Run Setup for Administrators](#10-first-run-setup-for-administrators)  
+11. [Troubleshooting](#11-troubleshooting)  
+12. [Need Help?](#need-help)
 
 ---
 
@@ -95,16 +96,45 @@ Select your user role and enter credentials.
 
 ## 9. Managing Permissions & Tagging
 
-- Right-click files/folders to set permissions and tags  
-- Permissions may be set recursively for folders  
-- Tags help identify content for users/roles
+### For All Users
+- Select files/folders from the S3 panel and click "Manage Permissions" to view current access settings
+- Permissions control who can view, download, and upload files
+- Files are automatically tagged with permission metadata for security
 
-> _Sample Screenshot: Permission Dialog_  
-> _Annotated: User Selection, Role Assignment, Recursive Checkbox_
+### For Administrators
+- **Review Pending Permissions:** Click the "Review Permissions" button (yellow button in S3 panel) to see files requiring attention
+- **Auto-Tagging System:** Files without proper permission tags are automatically assigned "Permission: pending" status
+- **Bulk Permission Management:** Select multiple files from the pending list to set permissions efficiently
+- **Permission Workflow:**
+  1. Files uploaded or synced without permission tags receive "pending" status
+  2. Use "Review Permissions" to see all pending files
+  3. Select files and click "Set Permissions" to assign proper access roles
+  4. Use "Clear All" to acknowledge review completion
+
+### Permission Types
+- **User Role:** Basic read-only access to assigned files
+- **Executive Role:** Download access plus upload to specific folders
+- **Administrator Role:** Full access to all files and permission management
+
+> **Note:** Permissions are applied recursively to folder contents. The system automatically ensures all files have proper permission metadata for security compliance.
 
 ---
 
-## 10. Troubleshooting
+## 10. First-Run Setup for Administrators
+
+When using the application for the first time or after adding new files to S3:
+
+1. **Initial File Review:** The application will automatically detect files missing permission tags
+2. **Review Notification:** A yellow "Review Permissions" button will appear for administrators
+3. **Permission Assignment:** Click the button to see all files requiring permission review
+4. **Set Appropriate Access:** Select files and assign User, Executive, or Administrator access as needed
+5. **Complete Setup:** Clear the pending list after assigning permissions
+
+This ensures all files have proper security metadata and users can access only authorized content.
+
+---
+
+## 11. Troubleshooting
 
 - **Configuration file not found:** Ensure `appsettings.json` is present  
 - **AWS Access Denied:** Check credentials and bucket permissions  

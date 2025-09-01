@@ -38,6 +38,9 @@ A comprehensive Windows desktop application for managing AWS S3 bucket files wit
 - **Recursive Permissions**: Apply folder permissions to all contents.
 - **Dynamic Access**: Real-time permission changes.
 - **Executive Upload Zones**: Predefined folders for Executive uploads.
+- **Auto-Tagging System**: Automatically assigns "Permission: pending" to files missing proper tags.
+- **Admin Review Workflow**: Dedicated interface for administrators to review and set permissions for auto-tagged files.
+- **First-Run Setup**: Streamlined process to ensure all files have proper permission metadata.
 
 ## 🏗️ Project Structure
 ```
