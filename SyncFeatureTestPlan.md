@@ -1,5 +1,56 @@
 # Test Plan: S3 to Local Sync Functionality
 
+This document outlines steps and checks for validating the sync feature between local files and AWS S3.
+
+---
+
+## Test Areas
+
+1. **Configuration**
+   - [ ] Correct AWS credentials
+   - [ ] Accessible S3 bucket
+
+2. **UI**
+   - [ ] Sync button visible and enabled for supported roles
+   - [ ] Proper error messages for failed sync
+
+3. **Functional**
+   - [ ] Local → S3 sync uploads all selected files/folders
+   - [ ] S3 → Local sync downloads all selected files/folders
+   - [ ] File/folder structure preserved after sync
+   - [ ] Metadata and permissions/tags remain intact
+
+4. **Edge Cases**
+   - [ ] Conflict resolution (same file exists in both locations)
+   - [ ] Network failure/retry handling
+   - [ ] Large files or deep directories handled gracefully
+   - [ ] Multi-user access scenarios
+
+5. **Security**
+   - [ ] Only authorized users can sync
+   - [ ] Permission checks for uploads/downloads
+
+6. **Logging**
+   - [ ] Sync actions are logged for audit
+
+7. **Performance**
+   - [ ] Sync time for large sets within acceptable limits
+
+---
+
+## Test Steps
+
+1. Configure app and log in as different roles.
+2. Attempt sync operations—verify results in AWS S3 and local folders.
+3. Check logs, UI messages, and error handling.
+4. Review permission/tagging after sync.
+
+---
+
+## Reporting
+
+Document all findings, failures, and screenshots for issues.
+
 **SUT (Software Under Test):**
 *   `SyncS3ToLocal` method in `Forms/MainForm.Operations.cs`
 *   `SyncButton_Click` event handler in `Forms/MainForm.Events.cs`

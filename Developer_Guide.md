@@ -1,0 +1,126 @@
+# AWS S3 Sync Utility - Developer Guide
+
+This guide helps contributors set up, work on, and extend the project. It also covers coding styles and open development gaps.
+
+---
+
+## Table of Contents
+
+1. [Project Setup](#1-project-setup)  
+2. [Architecture Overview](#2-architecture-overview)  
+3. [Coding Guidelines](#3-coding-guidelines)  
+4. [Permission Management & Auto-Tagging Workflow](#4-permission-management--auto-tagging-workflow)  
+5. [Contribution Workflow](#5-contribution-workflow)  
+6. [Known Gaps & TODOs](#6-known-gaps--todos)  
+7. [Resources](#7-resources)
+
+---
+
+## 1. Project Setup
+
+- Requires Visual Studio 2022, .NET 8.0 SDK  
+- Clone repo, open `AWSS3Sync.sln`, restore NuGet packages  
+- Create `appsettings.json` for local testing  
+- Build and run (`F5`)
+
+---
+
+## 2. Architecture Overview
+
+- **Models:** `UserRole`, `FileItem`, `AppConfig`  
+- **Services:** `S3Service`, `FileService`, `MetadataService`, `ConfigurationService`  
+- **Forms:** `LoginForm`, `MainForm`, `RoleSelectionForm`, `ProgressForm`
+
+See `README.md` for file structure.
+
+---
+
+## 3. Coding Guidelines
+
+### C#/.NET/WinForms Best Practices
+
+- Use [PascalCase](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions) for public members, [camelCase](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions) for private fields  
+- Prefer `async`/`await` for IO/network operations  
+- Keep UI logic separated from business logic. Use service classes for AWS/local operations  
+- Use proper error handling (`try/catch`) and logging  
+- Dispose resources (files, streams, network) properly  
+- Use [Windows Forms designer](https://learn.microsoft.com/en-us/dotnet/desktop/winforms/) for layout; avoid manual UI code when possible  
+- Follow SOLID principles for maintainable code  
+- Document public methods/classes with XML comments  
+- Write unit tests for core logic (see `SyncFeatureTestPlan.md`)
+
+### Workflow
+
+- Create feature branches per change/issue  
+- Use clear, descriptive commit messages  
+- Open pull requests for code review
+
+---
+
+## 4. Permission Management & Auto-Tagging Workflow
+
+### First-Run Tagging System
+
+The application implements an automatic tagging system for S3 objects that ensures all files have proper permission metadata:
+
+#### How Auto-Tagging Works
+- When the application encounters an S3 object without a `Permission` tag, it automatically assigns `Permission: pending`
+- Objects without `AccessRoles` tags receive default `AccessRoles: Administrator` 
+- Auto-tagged files are tracked in a static list for administrator review
+- This happens during file listing, sync operations, and permission retrieval
+
+#### Administrator Responsibilities
+
+**Daily Operations:**
+1. **Review Pending Permissions:** Use the "Review Permissions" button on the main interface to see files requiring attention
+2. **Set Proper Permissions:** Select files from the pending list and assign appropriate user roles (User, Executive, Administrator)
+3. **Clear Reviewed Files:** Use "Clear All" to acknowledge review completion after setting permissions
+
+**Best Practices:**
+- Review pending permissions regularly, especially after bulk uploads or sync operations
+- Consider the principle of least privilege when assigning permissions
+- Document permission decisions for audit purposes
+- Train users on proper file organization to minimize permission conflicts
+
+#### Technical Implementation
+- `MetadataService.AssignDefaultPermissionTagAsync()` handles auto-tagging logic
+- `AdminPermissionReviewForm` provides bulk permission management interface
+- Thread-safe tracking prevents duplicate entries in the pending list
+- Permission tags persist across sync operations and file transfers
+
+### Tagging Schema
+```
+AccessRoles: "User,Executive,Administrator" (comma-separated UserRole enum values)
+Permission: "pending" | "approved" | "restricted" (workflow status)
+```
+
+---
+
+## 5. Contribution Workflow
+
+1. Fork and clone the repo  
+2. Create a new branch: `git checkout -b feature/your-feature`  
+3. Make changes, commit, and push  
+4. Open a PR—describe your changes, link related issues  
+5. Address code review feedback and update your branch
+
+---
+
+## 6. Known Gaps & TODOs
+
+- **Sync feature:** Not fully implemented  
+- **Unit/Integration tests:** Limited or missing  
+- **Permission UI:** May need more granularity and bulk editing features  
+- **Audit logging:** Not present  
+- **Multi-factor authentication (MFA):** Not implemented  
+- **Error reporting:** Needs improvement (user-friendly messages, logging)  
+- **Documentation:** More screenshots, flow diagrams, and dev onboarding steps
+
+---
+
+## 7. Resources
+
+- [.NET Coding Conventions](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions)  
+- [WinForms Best Practices](https://learn.microsoft.com/en-us/dotnet/desktop/winforms/)  
+- [AWS SDK for .NET](https://docs.aws.amazon.com/sdk-for-net/)  
+- [Contributing to Open Source](https://opensource.guide/how-to-contribute/)
