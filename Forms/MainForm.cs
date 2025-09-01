@@ -251,6 +251,17 @@ namespace S3FileManager
             };
             refreshButton.Click += RefreshS3Button_Click;
 
+            var reviewPermissionsButton = new Button
+            {
+                Text = "Review Permissions",
+                Location = new Point(620, buttonY),
+                Size = new Size(120, 30),
+                Enabled = _currentUser.Role == UserRole.Administrator,
+                BackColor = Color.LightYellow,
+                Font = new Font("Arial", 8, FontStyle.Bold)
+            };
+            reviewPermissionsButton.Click += ReviewPermissionsButton_Click;
+
             // Search controls
             var selectionLabel = new Label
             {
@@ -288,7 +299,7 @@ namespace S3FileManager
             panel.Controls.AddRange(new Control[]
             {
                 headerLabel, bucketLabel, s3TreeView,
-                listButton, downloadButton, deleteButton, permissionsButton, refreshButton,
+                listButton, downloadButton, deleteButton, permissionsButton, refreshButton, reviewPermissionsButton,
                 selectionLabel, searchLabel, searchTextBox, clearSearchButton
             });
 

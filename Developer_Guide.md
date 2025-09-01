@@ -9,9 +9,10 @@ This guide helps contributors set up, work on, and extend the project. It also c
 1. [Project Setup](#1-project-setup)  
 2. [Architecture Overview](#2-architecture-overview)  
 3. [Coding Guidelines](#3-coding-guidelines)  
-4. [Contribution Workflow](#4-contribution-workflow)  
-5. [Known Gaps & TODOs](#5-known-gaps--todos)  
-6. [Resources](#6-resources)
+4. [Permission Management & Auto-Tagging Workflow](#4-permission-management--auto-tagging-workflow)  
+5. [Contribution Workflow](#5-contribution-workflow)  
+6. [Known Gaps & TODOs](#6-known-gaps--todos)  
+7. [Resources](#7-resources)
 
 ---
 
@@ -56,7 +57,46 @@ See `README.md` for file structure.
 
 ---
 
-## 4. Contribution Workflow
+## 4. Permission Management & Auto-Tagging Workflow
+
+### First-Run Tagging System
+
+The application implements an automatic tagging system for S3 objects that ensures all files have proper permission metadata:
+
+#### How Auto-Tagging Works
+- When the application encounters an S3 object without a `Permission` tag, it automatically assigns `Permission: pending`
+- Objects without `AccessRoles` tags receive default `AccessRoles: Administrator` 
+- Auto-tagged files are tracked in a static list for administrator review
+- This happens during file listing, sync operations, and permission retrieval
+
+#### Administrator Responsibilities
+
+**Daily Operations:**
+1. **Review Pending Permissions:** Use the "Review Permissions" button on the main interface to see files requiring attention
+2. **Set Proper Permissions:** Select files from the pending list and assign appropriate user roles (User, Executive, Administrator)
+3. **Clear Reviewed Files:** Use "Clear All" to acknowledge review completion after setting permissions
+
+**Best Practices:**
+- Review pending permissions regularly, especially after bulk uploads or sync operations
+- Consider the principle of least privilege when assigning permissions
+- Document permission decisions for audit purposes
+- Train users on proper file organization to minimize permission conflicts
+
+#### Technical Implementation
+- `MetadataService.AssignDefaultPermissionTagAsync()` handles auto-tagging logic
+- `AdminPermissionReviewForm` provides bulk permission management interface
+- Thread-safe tracking prevents duplicate entries in the pending list
+- Permission tags persist across sync operations and file transfers
+
+### Tagging Schema
+```
+AccessRoles: "User,Executive,Administrator" (comma-separated UserRole enum values)
+Permission: "pending" | "approved" | "restricted" (workflow status)
+```
+
+---
+
+## 5. Contribution Workflow
 
 1. Fork and clone the repo  
 2. Create a new branch: `git checkout -b feature/your-feature`  
@@ -66,7 +106,7 @@ See `README.md` for file structure.
 
 ---
 
-## 5. Known Gaps & TODOs
+## 6. Known Gaps & TODOs
 
 - **Sync feature:** Not fully implemented  
 - **Unit/Integration tests:** Limited or missing  
@@ -78,7 +118,7 @@ See `README.md` for file structure.
 
 ---
 
-## 6. Resources
+## 7. Resources
 
 - [.NET Coding Conventions](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions)  
 - [WinForms Best Practices](https://learn.microsoft.com/en-us/dotnet/desktop/winforms/)  
