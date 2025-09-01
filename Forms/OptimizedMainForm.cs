@@ -499,7 +499,48 @@ namespace S3FileManager.Forms
                 }
                 
                 // Add files
-                foreach (var file in Directory.GetFiles(path))
+private void LoadLocalDirectory(TreeNode parentNode, string path)
+        {
+            try
+            {
+                string fullPath = Path.GetFullPath(path);
+                string rootPath = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory);
+
+                if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new UnauthorizedAccessException("Access to the path is not allowed.");
+                }
+
+                // Add directories
+                foreach (var dir in Directory.GetDirectories(fullPath))
+                {
+                    var dirNode = new TreeNode($"📁 {Path.GetFileName(dir)}")
+                    {
+                        Tag = dir,
+                        ImageIndex = 0,
+                        SelectedImageIndex = 0
+                    };
+                    
+                    // Add dummy node for lazy loading
+                    if (Directory.GetDirectories(dir).Any() || Directory.GetFiles(dir).Any())
+                    {
+                        dirNode.Nodes.Add(new TreeNode("Loading..."));
+                    }
+                    
+                    parentNode.Nodes.Add(dirNode);
+                }
+                
+                // Add files
+                foreach (var file in Directory.GetFiles(fullPath))
+                {
+                    var fileInfo = new FileInfo(file);
+                    var fileNode = new TreeNode(
+                        $"📄 {Path.GetFileName(file)} ({FormatFileSize(fileInfo.Length)})")
+                    {
+                        Tag = file,
+                        ImageIndex = 1,
+                        SelectedImageIndex = 1
+                    };
                 {
                     var fileInfo = new FileInfo(file);
                     var fileNode = new TreeNode(
