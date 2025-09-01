@@ -137,7 +137,6 @@ namespace S3FileManager.Services
                 }
                 
                 continuationToken = response.NextContinuationToken;
-                
             } while (!string.IsNullOrEmpty(continuationToken) && !cancellationToken.IsCancellationRequested);
             
             // Filter out logs folder
