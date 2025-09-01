@@ -28,24 +28,28 @@ namespace S3FileManager.Services
         private readonly SemaphoreSlim _downloadSemaphore;
         private readonly ConcurrentDictionary<string, S3ObjectMetadata> _metadataCache;
         private readonly Timer _cacheCleanupTimer;
+        private readonly bool _hasValidCredentials;
         
-        public OptimizedS3Service(CognitoUser? cognitoUser = null)
+        public OptimizedS3Service(CognitoUser? cognitoUser = null, UnifiedUser? unifiedUser = null)
         {
             var config = ConfigurationService.GetConfiguration();
             _performanceConfig = config.Performance;
             
-            // Create S3 client with Cognito credentials if available
-            if (cognitoUser?.HasValidCredentials() == true && 
-                !string.IsNullOrEmpty(cognitoUser.AwsAccessKeyId))
+            // Determine which user to use (prefer unifiedUser)
+            var userToUse = unifiedUser ?? (cognitoUser != null ? UnifiedUser.FromCognitoUser(cognitoUser) : null);
+            
+            // Create S3 client with user credentials if available
+            if (userToUse?.HasAwsCredentials == true)
             {
-                // Use temporary credentials from Cognito
+                // Use temporary credentials from authenticated user
                 var credentials = new Amazon.Runtime.SessionAWSCredentials(
-                    cognitoUser.AwsAccessKeyId,
-                    cognitoUser.AwsSecretAccessKey,
-                    cognitoUser.AwsSessionToken);
+                    userToUse.AwsAccessKeyId!,
+                    userToUse.AwsSecretAccessKey!,
+                    userToUse.AwsSessionToken);
                 
                 _s3Client = new AmazonS3Client(credentials, 
                     RegionEndpoint.GetBySystemName(config.AWS.Region));
+                _hasValidCredentials = true;
             }
             else
             {
@@ -62,6 +66,7 @@ namespace S3FileManager.Services
                     config.AWS.AccessKey, 
                     config.AWS.SecretKey, 
                     awsConfig);
+                _hasValidCredentials = !string.IsNullOrEmpty(config.AWS.AccessKey) && !string.IsNullOrEmpty(config.AWS.SecretKey);
             }
             
             _bucketName = config.AWS.BucketName;
@@ -91,11 +96,25 @@ namespace S3FileManager.Services
         }
         
         /// <summary>
+        /// Validate that the service has proper AWS credentials
+        /// </summary>
+        private void ValidateCredentials(string operation = "S3 operation")
+        {
+            if (!_hasValidCredentials)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot perform {operation}: No valid AWS credentials available. " +
+                    "Please authenticate with AWS Cognito or configure AWS credentials.");
+            }
+        }
+        
+        /// <summary>
         /// List files with caching and pagination for better performance
         /// </summary>
         public async Task<List<S3FileItem>> ListFilesAsync(UserRole userRole, string prefix = "", 
             CancellationToken cancellationToken = default)
         {
+            ValidateCredentials("list S3 files");
             var files = new List<S3FileItem>();
             string? continuationToken = null;
             
@@ -152,6 +171,7 @@ namespace S3FileManager.Services
             List<UserRole> accessRoles, IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
+            ValidateCredentials("upload file to S3");
             await _uploadSemaphore.WaitAsync(cancellationToken);
             
             try
@@ -234,6 +254,7 @@ try
             List<UserRole> accessRoles, IProgress<int>? progress = null,
             CancellationToken cancellationToken = default)
         {
+            ValidateCredentials("upload directory to S3");
             var files = Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories);
             var uploadedCount = 0;
             
@@ -288,6 +309,7 @@ try
         public async Task DownloadFileAsync(string s3Key, string localPath, 
             IProgress<double>? progress = null, CancellationToken cancellationToken = default)
         {
+            ValidateCredentials("download file from S3");
             await _downloadSemaphore.WaitAsync(cancellationToken);
             
             try
@@ -608,6 +630,7 @@ try
         /// </summary>
         public async Task DeleteFileAsync(string s3Key, CancellationToken cancellationToken = default)
         {
+            ValidateCredentials("delete file from S3");
             var request = new DeleteObjectRequest
             {
                 BucketName = _bucketName,
