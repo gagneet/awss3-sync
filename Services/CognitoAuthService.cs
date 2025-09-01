@@ -40,7 +40,39 @@ namespace S3FileManager.Services
             
             _cognitoClient = new AmazonCognitoIdentityProviderClient(
                 new AnonymousAWSCredentials(), 
-                cognitoConfig);
+public CognitoAuthService()
+        {
+            var appConfig = ConfigurationService.GetConfiguration();
+            if (appConfig?.Cognito == null)
+            {
+                throw new InvalidOperationException("Cognito configuration is missing or invalid.");
+            }
+            _config = appConfig.Cognito;
+
+            if (string.IsNullOrEmpty(_config.Region) || string.IsNullOrEmpty(_config.UserPoolId) || string.IsNullOrEmpty(_config.ClientId))
+            {
+                throw new InvalidOperationException("Required Cognito configuration properties are missing.");
+            }
+
+            // Initialize Cognito client
+            var cognitoConfig = new AmazonCognitoIdentityProviderConfig
+            {
+                RegionEndpoint = RegionEndpoint.GetBySystemName(_config.Region)
+            };
+
+            try
+            {
+                _cognitoClient = new AmazonCognitoIdentityProviderClient(
+                    new AnonymousAWSCredentials(), 
+                    cognitoConfig);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to initialize AWS Cognito client.", ex);
+            }
+            
+            // Setup cache file path
+            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             
             // Setup cache file path
             string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
