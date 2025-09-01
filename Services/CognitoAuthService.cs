@@ -309,7 +309,14 @@ public CognitoAuthService()
             catch (Exception ex)
             {
                 // Log error but don't fail authentication
-                Console.WriteLine($"Failed to get AWS credentials: {ex.Message}");
+                try
+                {
+                    EventLog.WriteEntry("S3FileManager", $"Failed to get AWS credentials: {ex.Message}", EventLogEntryType.Error);
+                }
+                catch
+                {
+                    // Swallow any exceptions from logging to avoid affecting application flow
+                }
             }
         }
 
