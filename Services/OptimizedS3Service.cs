@@ -156,7 +156,12 @@ namespace S3FileManager.Services
             
             try
             {
+try
+            {
+                if (!File.Exists(filePath)) throw new FileNotFoundException($"File not found: {filePath}");
                 var fileInfo = new FileInfo(filePath);
+                
+                // Check if file needs to be uploaded using cached metadata
                 
                 // Check if file needs to be uploaded using cached metadata
                 if (_performanceConfig.EnableMetadataCache)
