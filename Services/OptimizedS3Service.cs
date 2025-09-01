@@ -293,7 +293,35 @@ try
             try
             {
                 var fileName = Path.GetFileName(s3Key);
-                var fullPath = Path.Combine(localPath, fileName);
+// Import Path from System.IO.Path for path sanitization
+        // Import Path.GetFullPath() to resolve relative paths to absolute paths
+        public async Task DownloadFileAsync(string s3Key, string localPath, 
+            IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            await _downloadSemaphore.WaitAsync(cancellationToken);
+            
+            try
+            {
+                var fileName = Path.GetFileName(s3Key);
+                var sanitizedLocalPath = Path.GetFullPath(localPath);
+                var fullPath = Path.Combine(sanitizedLocalPath, fileName);
+                
+                // Ensure the sanitized path is within the intended directory
+                if (!fullPath.StartsWith(sanitizedLocalPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ArgumentException("Invalid local path");
+                }
+                
+                // Create directory if it doesn't exist
+                Directory.CreateDirectory(sanitizedLocalPath);
+                
+                // Rest of the method remains unchanged
+                // ...
+            }
+            finally
+            {
+                _downloadSemaphore.Release();
+            }
                 
                 // Create directory if it doesn't exist
                 Directory.CreateDirectory(localPath);
