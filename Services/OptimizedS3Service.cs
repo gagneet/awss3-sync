@@ -273,7 +273,7 @@ try
                         catch (Exception ex)
                         {
                             // Log error but continue with other files
-                            Console.WriteLine($"Failed to upload {filePath}: {ex.Message}");
+                            EventLog.WriteEntry("Application", $"Failed to upload {filePath}: {ex.Message}", EventLogEntryType.Error);
                         }
                     }
                 });
