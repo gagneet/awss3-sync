@@ -998,16 +998,23 @@ namespace S3FileManager
                     using var s3Client = new Amazon.S3.AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
                     var metadataService = new MetadataService(s3Client, config.AWS.BucketName);
 
-                    var progressForm = new ProgressForm("Updating permissions...");
+                    using var progressForm = new ProgressForm("Updating permissions...");
                     progressForm.Show();
                     
-                    foreach (var fileKey in selectedFiles)
+                    try
                     {
-                        progressForm.UpdateMessage($"Setting permissions for: {fileKey}");
-                        await metadataService.SetFileAccessRolesAsync(fileKey, permissionForm.SelectedRoles);
+                        foreach (var fileKey in selectedFiles)
+                        {
+                            progressForm.UpdateMessage($"Setting permissions for: {fileKey}");
+                            await metadataService.SetFileAccessRolesAsync(fileKey, permissionForm.SelectedRoles);
+                        }
                     }
-                    
-                    progressForm.Close();
+                    catch
+                    {
+                        // Re-throw to be handled by outer catch block
+                        // The using statement will ensure progressForm is disposed
+                        throw;
+                    }
 
                     MessageBox.Show($"Successfully updated permissions for {selectedFiles.Count} file(s).",
                         "Permissions Updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
