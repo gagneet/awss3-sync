@@ -110,7 +110,13 @@ namespace S3FileManager.Forms
                 Location = new Point(790, 10),
                 Size = new Size(90, 30)
             };
-            _refreshButton.Click += async (s, e) => await RefreshS3Files();
+Location = new Point(790, 10),
+                Size = new Size(90, 30)
+            };
+            _refreshButton.Click += RefreshButton_Click;
+            
+            _logoutButton = new Button
+            {
             
             _logoutButton = new Button
             {
