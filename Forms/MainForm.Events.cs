@@ -121,7 +121,7 @@ namespace S3FileManager
                 node.Checked = nodeChecked;
                 if (node.Tag is FileNode fileNode)
                 {
-                     var isLocal = treeNode.TreeView.Name == "localTreeView";
+                     var isLocal = treeNode.TreeView != null && treeNode.TreeView.Name == "localTreeView";
                      var checkedItems = isLocal ? _localCheckedItems : _s3CheckedItems;
                      checkedItems[fileNode.Path] = nodeChecked;
                 }
