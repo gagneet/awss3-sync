@@ -1,112 +1,85 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Forms;
-using Newtonsoft.Json;
+using Amazon.S3;
+using Amazon.S3.Model;
 using S3FileManager.Models;
 
 namespace S3FileManager.Services
 {
     public class MetadataService
     {
-        private readonly string _metadataPath;
-        private Dictionary<string, List<UserRole>> _fileAccessRoles = new Dictionary<string, List<UserRole>>();
+        private readonly IAmazonS3 _s3Client;
+        private readonly string _bucketName;
+        private const string RolesTagKey = "AccessRoles";
 
-        public MetadataService()
+        public MetadataService(IAmazonS3 s3Client, string bucketName)
         {
-            _metadataPath = Path.Combine(Application.StartupPath, "file_permissions.json");
-            LoadMetadata();
-        }
-
-        private void LoadMetadata()
-        {
-            try
-            {
-                if (File.Exists(_metadataPath))
-                {
-                    string json = File.ReadAllText(_metadataPath);
-                    var data = JsonConvert.DeserializeObject<Dictionary<string, List<string>>>(json);
-                    if (data != null)
-                    {
-                        _fileAccessRoles = data.ToDictionary(
-                            kvp => kvp.Key,
-                            kvp => kvp.Value.Select(r => Enum.Parse<UserRole>(r)).ToList()
-                        );
-                    }
-                }
-                else
-                {
-                    _fileAccessRoles = new Dictionary<string, List<UserRole>>();
-                }
-            }
-            catch
-            {
-                _fileAccessRoles = new Dictionary<string, List<UserRole>>();
-            }
-        }
-
-        private void SaveMetadata()
-        {
-            try
-            {
-                var data = _fileAccessRoles.ToDictionary(
-                    kvp => kvp.Key,
-                    kvp => kvp.Value.Select(r => r.ToString()).ToList()
-                );
-                string json = JsonConvert.SerializeObject(data, Formatting.Indented);
-                File.WriteAllText(_metadataPath, json);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error saving metadata: {ex.Message}", "Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            _s3Client = s3Client;
+            _bucketName = bucketName;
         }
 
         public async Task<List<UserRole>> GetFileAccessRolesAsync(string key)
         {
-            await Task.CompletedTask; // Make it async for future database integration
-
-            if (_fileAccessRoles.ContainsKey(key))
+            try
             {
-                return _fileAccessRoles[key];
-            }
-
-            // Check if parent folder has permissions
-            var parentFolder = GetParentFolder(key);
-            while (!string.IsNullOrEmpty(parentFolder))
-            {
-                if (_fileAccessRoles.ContainsKey(parentFolder + "/"))
+                var request = new GetObjectTaggingRequest
                 {
-                    return _fileAccessRoles[parentFolder + "/"];
+                    BucketName = _bucketName,
+                    Key = key
+                };
+                var response = await _s3Client.GetObjectTaggingAsync(request);
+                var rolesTag = response.Tagging.FirstOrDefault(t => t.Key == RolesTagKey);
+
+                if (rolesTag != null && !string.IsNullOrEmpty(rolesTag.Value))
+                {
+                    return rolesTag.Value.Split(',')
+                        .Select(r => Enum.Parse<UserRole>(r))
+                        .ToList();
                 }
-                parentFolder = GetParentFolder(parentFolder);
+            }
+            catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchTagSet")
+            {
+                // No tags exist, so return default
+            }
+            catch (Exception)
+            {
+                // Log exception if necessary
             }
 
-            // Default: only administrators can access
+            // Default to Administrator only if no tags are found or an error occurs
             return new List<UserRole> { UserRole.Administrator };
         }
 
         public async Task SetFileAccessRolesAsync(string key, List<UserRole> roles)
         {
-            await Task.CompletedTask;
-            _fileAccessRoles[key] = new List<UserRole>(roles);
-            SaveMetadata();
+            var newTag = new Tag
+            {
+                Key = RolesTagKey,
+                Value = string.Join(",", roles.Select(r => r.ToString()))
+            };
+
+            var request = new PutObjectTaggingRequest
+            {
+                BucketName = _bucketName,
+                Key = key,
+                Tagging = new Tagging
+                {
+                    TagSet = new List<Tag> { newTag }
+                }
+            };
+            await _s3Client.PutObjectTaggingAsync(request);
         }
 
         public async Task RemoveFileAccessRolesAsync(string key)
         {
-            await Task.CompletedTask;
-            _fileAccessRoles.Remove(key);
-            SaveMetadata();
-        }
-
-        private string GetParentFolder(string key)
-        {
-            var lastSlash = key.LastIndexOf('/');
-            return lastSlash > 0 ? key.Substring(0, lastSlash) : "";
+            var request = new DeleteObjectTaggingRequest
+            {
+                BucketName = _bucketName,
+                Key = key
+            };
+            await _s3Client.DeleteObjectTaggingAsync(request);
         }
     }
 }

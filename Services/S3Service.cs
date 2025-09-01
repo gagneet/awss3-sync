@@ -22,7 +22,7 @@ namespace S3FileManager.Services
             var awsConfig = new AmazonS3Config { RegionEndpoint = RegionEndpoint.GetBySystemName(config.AWS.Region) };
             _s3Client = new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
             _bucketName = config.AWS.BucketName;
-            _metadataService = new MetadataService();
+            _metadataService = new MetadataService(_s3Client, _bucketName);
         }
 
         public async Task<List<FileNode>> ListFilesAsync(UserRole userRole)
@@ -270,8 +270,13 @@ namespace S3FileManager.Services
             return fullPath;
         }
 
-        public async Task DeleteFileAsync(string s3Key)
+        public async Task DeleteFileAsync(string s3Key, UserRole userRole)
         {
+            if (userRole != UserRole.Administrator)
+            {
+                throw new InvalidOperationException("Only administrators can delete files.");
+            }
+
             var request = new DeleteObjectRequest
             {
                 BucketName = _bucketName,
