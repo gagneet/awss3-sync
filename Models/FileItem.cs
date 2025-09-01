@@ -18,7 +18,7 @@ namespace S3FileManager.Models
         public long Size { get; set; }
         public DateTime LastModified { get; set; }
         public List<UserRole> AccessRoles { get; set; } = new List<UserRole>();
-        public bool IsDirectory => Key.EndsWith("/");
+        public bool IsDirectory { get; set; }
         public string DisplayName => Key.Contains('/') ? Key : System.IO.Path.GetFileName(Key);
     }
 

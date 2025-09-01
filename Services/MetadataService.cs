@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using Amazon.S3;
 using Amazon.S3.Model;
 using S3FileManager.Models;
@@ -58,7 +57,7 @@ namespace S3FileManager.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"An unexpected error occurred while retrieving file permissions for '{key}': {ex.Message}", "Permission Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                throw new InvalidOperationException($"An unexpected error occurred while retrieving file permissions for '{key}': {ex.Message}", ex);
             }
 
             // Default to Administrator only if no tags are found or an error occurs
@@ -210,9 +209,8 @@ namespace S3FileManager.Services
             }
             catch (Exception ex)
             {
-                // Don't fail the main operation if auto-tagging fails, just log it
-                MessageBox.Show($"Warning: Could not auto-assign permission tag to '{key}': {ex.Message}", 
-                    "Auto-Tagging Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // Don't fail the main operation if auto-tagging fails, just throw a descriptive exception
+                throw new InvalidOperationException($"Warning: Could not auto-assign permission tag to '{key}': {ex.Message}", ex);
             }
         }
 
