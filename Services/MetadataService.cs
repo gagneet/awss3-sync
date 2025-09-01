@@ -93,12 +93,36 @@ namespace S3FileManager.Services
 
         public async Task RemoveFileAccessRolesAsync(string key)
         {
-            var request = new DeleteObjectTaggingRequest
+            List<Tag> currentTags = new List<Tag>();
+            try
+            {
+                var getTagsResponse = await _s3Client.GetObjectTaggingAsync(new GetObjectTaggingRequest
+                {
+                    BucketName = _bucketName,
+                    Key = key
+                });
+                currentTags = getTagsResponse.Tagging;
+            }
+            catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchTagSet")
+            {
+                // No tags to remove, so we're done.
+                return;
+            }
+
+            // Remove the roles tag
+            currentTags.RemoveAll(t => t.Key == RolesTagKey);
+
+            // Apply the remaining tags
+            var request = new PutObjectTaggingRequest
             {
                 BucketName = _bucketName,
-                Key = key
+                Key = key,
+                Tagging = new Tagging
+                {
+                    TagSet = currentTags
+                }
             };
-            await _s3Client.DeleteObjectTaggingAsync(request);
+            await _s3Client.PutObjectTaggingAsync(request);
         }
     }
 }
