@@ -2,15 +2,18 @@
 using System.Drawing;
 using System.Windows.Forms;
 using S3FileManager.Models;
+using S3FileManager.Services;
 
 namespace S3FileManager
 {
     public partial class LoginForm : Form
     {
         public User? CurrentUser { get; private set; }
+        private readonly UserService _userService;
 
         public LoginForm()
         {
+            _userService = new UserService();
             InitializeComponent();
         }
 
@@ -46,22 +49,20 @@ namespace S3FileManager
                 Size = new Size(150, 25)
             };
 
-            var roleLabel = new Label
+            var passwordLabel = new Label
             {
-                Text = "Role:",
+                Text = "Password:",
                 Location = new Point(50, 120),
                 Size = new Size(80, 20)
             };
 
-            var roleComboBox = new ComboBox
+            var passwordTextBox = new TextBox
             {
-                Name = "roleComboBox",
+                Name = "passwordTextBox",
                 Location = new Point(150, 118),
                 Size = new Size(150, 25),
-                DropDownStyle = ComboBoxStyle.DropDownList
+                PasswordChar = '*'
             };
-            roleComboBox.Items.AddRange(new[] { "User", "Executive", "Administrator" });
-            roleComboBox.SelectedIndex = 0;
 
             var loginButton = new Button
             {
@@ -74,7 +75,7 @@ namespace S3FileManager
             this.Controls.AddRange(new Control[]
             {
                 titleLabel, usernameLabel, usernameTextBox,
-                roleLabel, roleComboBox, loginButton
+                passwordLabel, passwordTextBox, loginButton
             });
 
             this.AcceptButton = loginButton;
@@ -83,7 +84,7 @@ namespace S3FileManager
         private void LoginButton_Click(object? sender, EventArgs e)
         {
             var usernameTextBox = this.Controls.Find("usernameTextBox", false)[0] as TextBox;
-            var roleComboBox = this.Controls.Find("roleComboBox", false)[0] as ComboBox;
+            var passwordTextBox = this.Controls.Find("passwordTextBox", false)[0] as TextBox;
 
             if (usernameTextBox == null || string.IsNullOrWhiteSpace(usernameTextBox.Text))
             {
@@ -92,22 +93,25 @@ namespace S3FileManager
                 return;
             }
 
-            if (roleComboBox?.SelectedItem == null)
+            if (passwordTextBox == null || string.IsNullOrWhiteSpace(passwordTextBox.Text))
             {
-                MessageBox.Show("Please select a role.", "Login Error",
+                MessageBox.Show("Please enter a password.", "Login Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            CurrentUser = new User
-            {
-                Username = usernameTextBox.Text,
-                Role = Enum.Parse<UserRole>(roleComboBox.SelectedItem.ToString() ?? "User"),
-                LastLogin = DateTime.Now
-            };
+            CurrentUser = _userService.ValidateUser(usernameTextBox.Text, passwordTextBox.Text);
 
-            this.DialogResult = DialogResult.OK;
-            this.Close();
+            if (CurrentUser != null)
+            {
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+            }
+            else
+            {
+                MessageBox.Show("Invalid username or password.", "Login Failed",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }

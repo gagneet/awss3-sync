@@ -214,12 +214,19 @@ namespace S3FileManager
 
             if (MessageBox.Show("Are you sure you want to delete the selected items?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
             {
-                foreach (var item in selectedItems)
+                try
                 {
-                    await _s3Service.DeleteFileAsync(item.Path);
+                    foreach (var item in selectedItems)
+                    {
+                        await _s3Service.DeleteFileAsync(item.Path, _currentUser.Role);
+                    }
+                    MessageBox.Show("Deletion complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    await LoadS3FilesAsync();
                 }
-                MessageBox.Show("Deletion complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                await LoadS3FilesAsync();
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Deletion failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
