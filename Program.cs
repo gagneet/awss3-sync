@@ -8,8 +8,14 @@ namespace S3FileManager
     public class Program
     {
         [STAThread]
-        public static void Main()
+        public static async Task Main(string[] args)
         {
+            // Check if we should run tests instead of the UI
+            if (await RunTestsIfRequested(args))
+            {
+                return;
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
@@ -109,6 +115,28 @@ namespace S3FileManager
                 Role = user.Role,
                 LastLogin = user.LastLogin
             };
+        }
+        
+        /// <summary>
+        /// Run basic tests if launched with --test argument
+        /// </summary>
+        public static async Task<bool> RunTestsIfRequested(string[] args)
+        {
+            if (args.Length > 0 && args[0] == "--test")
+            {
+                try
+                {
+                    await S3FileManager.Tests.UnifiedAuthTests.RunBasicTests();
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Tests failed: {ex.Message}");
+                    Console.WriteLine(ex.StackTrace);
+                    return true; // Still exit, don't launch UI
+                }
+            }
+            return false;
         }
     }
 }
