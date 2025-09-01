@@ -417,7 +417,21 @@ try
             }
             else
             {
-                Directory.CreateDirectory(localPath);
+}
+            else
+            {
+                // Validate and sanitize the localPath
+                string fullPath = Path.GetFullPath(localPath);
+                if (!fullPath.StartsWith(Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)))
+                {
+                    throw new ArgumentException("Invalid local path");
+                }
+                Directory.CreateDirectory(fullPath);
+            }
+            
+            // Rest of the code remains unchanged
+            // ...
+        }
             }
             
             // Determine files to download, skip, and delete
