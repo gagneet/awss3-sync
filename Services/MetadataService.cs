@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using Amazon.S3;
 using Amazon.S3.Model;
 using S3FileManager.Models;
@@ -43,9 +44,9 @@ namespace S3FileManager.Services
             {
                 // No tags exist, so return default
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Log exception if necessary
+                MessageBox.Show($"An unexpected error occurred while retrieving file permissions for '{key}': {ex.Message}", "Permission Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
             // Default to Administrator only if no tags are found or an error occurs
