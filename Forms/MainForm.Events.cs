@@ -272,6 +272,28 @@ namespace S3FileManager
             await LoadS3FilesAsync();
         }
 
+        private void ManagePermissionsButton_Click(object sender, EventArgs e)
+        {
+            // Placeholder stub for permissions management functionality
+            MessageBox.Show("Permissions management functionality not yet implemented.", "Not Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void SearchTextBox_TextChanged(object sender, EventArgs e)
+        {
+            // Placeholder stub for search functionality
+            // This would typically filter the S3 TreeView based on the search text
+        }
+
+        private void ClearSearchButton_Click(object sender, EventArgs e)
+        {
+            // Placeholder stub for clearing search
+            var searchTextBox = this.Controls.Find("searchTextBox", true).FirstOrDefault() as TextBox;
+            if (searchTextBox != null)
+            {
+                searchTextBox.Clear();
+            }
+        }
+
         #endregion
     }
 }
