@@ -85,7 +85,7 @@ if (-not (Test-Path $configPath)) {
     "ClientSecret": "",
     "Region": "ap-southeast-2",
     "IdentityPoolId": "YOUR_IDENTITY_POOL_ID",
-    "EnableOfflineMode": true,
+    "EnableOfflineMode": false,
     "OfflineCacheDurationDays": 7
   },
   "Performance": {
