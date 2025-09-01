@@ -98,7 +98,7 @@ namespace S3FileManager.Services
                     }
                 }
                 request.ContinuationToken = response.NextContinuationToken;
-            } while (response.IsTruncated == true);
+            } while (response.IsTruncated.GetValueOrDefault());
             files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
             return FilterFilesForRole(files, userRole);
         }
