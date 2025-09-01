@@ -5,6 +5,8 @@ using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Amazon;
+using Amazon.S3;
 using S3FileManager.Models;
 using S3FileManager.Services;
 
@@ -656,7 +658,12 @@ namespace S3FileManager
             if (_selectedItems.Count == 1)
             {
                 var item = _selectedItems[0];
-                var metadataService = new MetadataService();
+                
+                // Create S3 client and MetadataService similar to S3Service
+                var config = ConfigurationService.GetConfiguration();
+                var awsConfig = new Amazon.S3.AmazonS3Config { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(config.AWS.Region) };
+                using var s3Client = new Amazon.S3.AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
+                var metadataService = new MetadataService(s3Client, config.AWS.BucketName);
 
                 try
                 {

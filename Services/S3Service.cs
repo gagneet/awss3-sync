@@ -174,7 +174,7 @@ namespace S3FileManager.Services
                 var metadata = await _s3Client.GetObjectMetadataAsync(request);
                 return new S3ObjectAttributes
                 {
-                    LastModified = metadata.LastModified.ToUniversalTime(),
+                    LastModified = metadata.LastModified?.ToUniversalTime() ?? DateTime.UtcNow,
                     Size = metadata.ContentLength
                 };
             }

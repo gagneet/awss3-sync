@@ -27,7 +27,7 @@ namespace S3FileManager
                 Tag = new FileNode(dirInfo.Name, dirInfo.FullName, true, 0, dirInfo.LastWriteTime)
             };
 
-            if (Directory.EnumerateFileSystemEntries(path).Any())
+            if (dirInfo.GetFileSystemInfos().Any())
             {
                 rootNode.Nodes.Add(new TreeNode("Loading..."));
             }
@@ -48,7 +48,7 @@ namespace S3FileManager
                     {
                         Tag = new FileNode(dir.Name, dir.FullName, true, 0, dir.LastWriteTime)
                     };
-                    if (dir.EnumerateFileSystemEntries().Any())
+                    if (dir.GetFileSystemInfos().Any())
                     {
                         dirNode.Nodes.Add(new TreeNode("Loading..."));
                     }
