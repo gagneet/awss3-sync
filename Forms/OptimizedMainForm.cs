@@ -550,7 +550,7 @@ private void LoadLocalDirectory(TreeNode parentNode, string path)
                     };
                     
                     // Add dummy node for lazy loading
-                    if (IsSubdirectoryOf(path, dir) && (Directory.GetDirectories(dir).Any() || Directory.GetFiles(dir).Any()))
+                    if (IsSubdirectoryOf(path, dir) && (Directory.GetDirectories(dir).Length != 0 || Directory.GetFiles(dir).Length != 0))
                     {
                         dirNode.Nodes.Add(new TreeNode("Loading..."));
                     }
