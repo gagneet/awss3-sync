@@ -295,7 +295,15 @@ Location = new Point(790, 10),
         {
             var imageList = new ImageList();
             imageList.Images.Add("folder", SystemIcons.Shield.ToBitmap()); // Placeholder
-            imageList.Images.Add("file", SystemIcons.Application.ToBitmap()); // Placeholder
+            // Use the default folder icon from the system
+            var folderIcon = Icon.ExtractAssociatedIcon(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
+            imageList.Images.Add("folder", folderIcon != null ? folderIcon.ToBitmap() : SystemIcons.WinLogo.ToBitmap());
+            // Use the default file icon (e.g., .txt file)
+            var tempFile = Path.Combine(Path.GetTempPath(), "tempfile.txt");
+            File.WriteAllText(tempFile, ""); // Ensure file exists
+            var fileIcon = Icon.ExtractAssociatedIcon(tempFile);
+            imageList.Images.Add("file", fileIcon != null ? fileIcon.ToBitmap() : SystemIcons.Application.ToBitmap());
+            File.Delete(tempFile);
             return imageList;
         }
         
