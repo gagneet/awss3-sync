@@ -522,7 +522,56 @@ private void LoadLocalDirectory(TreeNode parentNode, string path)
                     };
                     
                     // Add dummy node for lazy loading
-                    if (Directory.GetDirectories(dir).Any() || Directory.GetFiles(dir).Any())
+{
+            try
+            {
+                // Add directories
+                foreach (var dir in Directory.GetDirectories(path))
+                {
+                    var dirNode = new TreeNode($"📁 {Path.GetFileName(dir)}")
+                    {
+                        Tag = dir,
+                        ImageIndex = 0,
+                        SelectedImageIndex = 0
+                    };
+                    
+                    // Add dummy node for lazy loading
+                    if (IsSubdirectoryOf(path, dir) && (Directory.GetDirectories(dir).Any() || Directory.GetFiles(dir).Any()))
+                    {
+                        dirNode.Nodes.Add(new TreeNode("Loading..."));
+                    }
+                    
+                    parentNode.Nodes.Add(dirNode);
+                }
+                
+                // Add files
+                foreach (var file in Directory.GetFiles(path))
+                {
+                    var fileInfo = new FileInfo(file);
+                    var fileNode = new TreeNode(
+                        $"📄 {Path.GetFileName(file)} ({FormatFileSize(fileInfo.Length)})")
+                    {
+                        Tag = file,
+                        ImageIndex = 1,
+                        SelectedImageIndex = 1
+                    };
+                    
+                    parentNode.Nodes.Add(fileNode);
+                }
+            }
+            catch (Exception ex)
+            {
+                parentNode.Nodes.Add(new TreeNode($"Error: {ex.Message}"));
+            }
+        }
+
+        // Helper method to check if a directory is a subdirectory of another
+        private bool IsSubdirectoryOf(string parentPath, string childPath)
+        {
+            var parentFullPath = Path.GetFullPath(parentPath);
+            var childFullPath = Path.GetFullPath(childPath);
+            return childFullPath.StartsWith(parentFullPath, StringComparison.OrdinalIgnoreCase);
+        }
                     {
                         dirNode.Nodes.Add(new TreeNode("Loading..."));
                     }
