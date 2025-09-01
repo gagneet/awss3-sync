@@ -4,6 +4,14 @@ A comprehensive Windows desktop application for managing AWS S3 bucket files wit
 
 ![Application Screenshot](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-8.0-purple) ![AWS](https://img.shields.io/badge/AWS-S3-orange)
 
+## 📚 Documentation
+
+- [User Guide](USER_GUIDE.md): Step-by-step instructions for installation, configuration, and daily use.
+- [Developer Guide](DEVELOPER_GUIDE.md): Architecture overview, coding standards, contribution workflow, and known gaps/TODOs.
+- [Sync Feature Test Plan](SyncFeatureTestPlan.md): Checklist and template for validating the sync functionality.
+
+> For full sync limitations, developer onboarding, and usage walkthroughs, please consult the above guides.
+
 ## 🌟 Features
 
 ### 🔐 Role-Based Access Control
@@ -21,7 +29,8 @@ A comprehensive Windows desktop application for managing AWS S3 bucket files wit
 ### 📁 File Operations
 - **Upload**: Individual files or entire folder structures.
 - **Download**: Selective downloading of files and folders.
-- **Sync**: Synchronize local folders with an S3 bucket (Note: This feature is currently not fully implemented).
+- **Sync**: Synchronize local folders with an S3 bucket.  
+  **Note:** This feature is still in development. See [SyncFeatureTestPlan.md](SyncFeatureTestPlan.md) for test details and limitations.
 - **Delete**: Enhanced confirmation system for permanent deletion.
 
 ### 🛡️ Advanced Permission Management
@@ -51,6 +60,8 @@ AWSS3Sync/
 └── Program.cs               # Application entry point
 ```
 
+> For detailed architecture, coding guidelines, and contribution process, see [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md).
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -61,8 +72,8 @@ AWSS3Sync/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-repo/AWSS3Sync.git
-cd AWSS3Sync
+git clone https://github.com/gagneet/awss3-sync.git
+cd awss3-sync
 ```
 
 ### 2. Configure AWS Settings
@@ -86,6 +97,8 @@ The file should contain your AWS credentials and S3 bucket details:
 1.  Open the `AWSS3Sync.sln` file in Visual Studio 2022.
 2.  Visual Studio should automatically restore the required NuGet packages.
 3.  Press `F5` or click the "Start" button to build and run the application.
+
+> For a step-by-step walkthrough and troubleshooting, please refer to [USER_GUIDE.md](USER_GUIDE.md).
 
 ## 📦 Building a Standalone Application
 
