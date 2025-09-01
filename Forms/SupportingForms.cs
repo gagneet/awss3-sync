@@ -816,4 +816,236 @@ namespace S3FileManager
             }
         }
     }
+
+    // Admin Permission Review Form - for reviewing auto-tagged files
+    public class AdminPermissionReviewForm : Form
+    {
+        private readonly List<string> _autoTaggedFiles;
+
+        public AdminPermissionReviewForm()
+        {
+            _autoTaggedFiles = MetadataService.GetAutoTaggedFiles();
+            InitializeComponent();
+            PopulateFiles();
+        }
+
+        private void InitializeComponent()
+        {
+            this.Size = new Size(650, 550);
+            this.Text = "Admin: Review Pending Permissions";
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.BackColor = Color.FromArgb(255, 250, 240);
+
+            var titleLabel = new Label
+            {
+                Text = "📋 Permission Review Required",
+                Font = new Font("Arial", 16, FontStyle.Bold),
+                ForeColor = Color.DarkOrange,
+                Location = new Point(20, 20),
+                Size = new Size(600, 35),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            var descriptionLabel = new Label
+            {
+                Text = "The following files were automatically assigned 'Permission: pending' status because " +
+                       "they were missing proper permission tags. As an administrator, please review and set " +
+                       "appropriate permissions for these files:",
+                Location = new Point(20, 65),
+                Size = new Size(600, 50),
+                Font = new Font("Arial", 10)
+            };
+
+            var filesLabel = new Label
+            {
+                Text = $"Files requiring permission review ({_autoTaggedFiles.Count} total):",
+                Font = new Font("Arial", 11, FontStyle.Bold),
+                Location = new Point(20, 125),
+                Size = new Size(500, 25)
+            };
+
+            var filesListBox = new ListBox
+            {
+                Location = new Point(20, 155),
+                Size = new Size(600, 250),
+                Name = "filesListBox",
+                SelectionMode = SelectionMode.MultiExtended
+            };
+
+            var instructionsLabel = new Label
+            {
+                Text = "Instructions:\n" +
+                       "1. Select one or more files from the list above\n" +
+                       "2. Click 'Set Permissions' to assign proper access roles\n" +
+                       "3. Use 'Clear All' to acknowledge review (removes from this list)\n" +
+                       "4. Files will continue to have 'Permission: pending' until you update them",
+                Location = new Point(20, 420),
+                Size = new Size(600, 70),
+                ForeColor = Color.DarkBlue
+            };
+
+            var setPermissionsButton = new Button
+            {
+                Text = "Set Permissions",
+                Location = new Point(350, 500),
+                Size = new Size(120, 35),
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                BackColor = Color.LightGreen,
+                Name = "setPermissionsButton",
+                Enabled = false
+            };
+            setPermissionsButton.Click += SetPermissionsButton_Click;
+
+            var clearAllButton = new Button
+            {
+                Text = "Clear All",
+                Location = new Point(480, 500),
+                Size = new Size(80, 35),
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                BackColor = Color.LightBlue
+            };
+            clearAllButton.Click += ClearAllButton_Click;
+
+            var closeButton = new Button
+            {
+                Text = "Close",
+                Location = new Point(570, 500),
+                Size = new Size(70, 35),
+                DialogResult = DialogResult.OK
+            };
+
+            filesListBox.SelectedIndexChanged += FilesListBox_SelectedIndexChanged;
+
+            this.Controls.AddRange(new Control[]
+            {
+                titleLabel, descriptionLabel, filesLabel, filesListBox, instructionsLabel,
+                setPermissionsButton, clearAllButton, closeButton
+            });
+
+            this.AcceptButton = closeButton;
+        }
+
+        private void PopulateFiles()
+        {
+            var filesListBox = this.Controls.Find("filesListBox", false)[0] as ListBox;
+            if (filesListBox == null) return;
+
+            if (_autoTaggedFiles.Count == 0)
+            {
+                filesListBox.Items.Add("✅ No files require permission review - all files have proper permissions!");
+            }
+            else
+            {
+                foreach (var file in _autoTaggedFiles)
+                {
+                    filesListBox.Items.Add($"⚠️ {file}");
+                }
+            }
+        }
+
+        private void FilesListBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            var listBox = sender as ListBox;
+            var setPermissionsButton = this.Controls.Find("setPermissionsButton", false)[0] as Button;
+
+            if (listBox != null && setPermissionsButton != null)
+            {
+                setPermissionsButton.Enabled = listBox.SelectedIndices.Count > 0 && _autoTaggedFiles.Count > 0;
+            }
+        }
+
+        private async void SetPermissionsButton_Click(object? sender, EventArgs e)
+        {
+            var filesListBox = this.Controls.Find("filesListBox", false)[0] as ListBox;
+            if (filesListBox == null || filesListBox.SelectedIndices.Count == 0 || _autoTaggedFiles.Count == 0)
+                return;
+
+            // Get selected file keys
+            var selectedFiles = new List<string>();
+            foreach (int index in filesListBox.SelectedIndices)
+            {
+                if (index < _autoTaggedFiles.Count)
+                {
+                    selectedFiles.Add(_autoTaggedFiles[index]);
+                }
+            }
+
+            if (selectedFiles.Count == 0) return;
+
+            try
+            {
+                // Create S3FileItems for the permission form
+                var s3Items = selectedFiles.Select(key => new S3FileItem
+                {
+                    Key = key,
+                    AccessRoles = new List<UserRole> { UserRole.Administrator },
+                    IsDirectory = key.EndsWith("/")
+                }).ToList();
+
+                // Show permission management form
+                using var permissionForm = new PermissionManagementForm(s3Items);
+                if (permissionForm.ShowDialog() == DialogResult.OK)
+                {
+                    // Apply the selected permissions using MetadataService
+                    var config = ConfigurationService.GetConfiguration();
+                    var awsConfig = new Amazon.S3.AmazonS3Config 
+                    { 
+                        RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(config.AWS.Region) 
+                    };
+                    using var s3Client = new Amazon.S3.AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
+                    var metadataService = new MetadataService(s3Client, config.AWS.BucketName);
+
+                    var progressForm = new ProgressForm("Updating permissions...");
+                    progressForm.Show();
+                    
+                    foreach (var fileKey in selectedFiles)
+                    {
+                        progressForm.UpdateMessage($"Setting permissions for: {fileKey}");
+                        await metadataService.SetFileAccessRolesAsync(fileKey, permissionForm.SelectedRoles);
+                    }
+                    
+                    progressForm.Close();
+
+                    MessageBox.Show($"Successfully updated permissions for {selectedFiles.Count} file(s).",
+                        "Permissions Updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    // Refresh the list
+                    _autoTaggedFiles.Clear();
+                    _autoTaggedFiles.AddRange(MetadataService.GetAutoTaggedFiles());
+                    PopulateFiles();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error updating permissions: {ex.Message}", "Error", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ClearAllButton_Click(object? sender, EventArgs e)
+        {
+            if (_autoTaggedFiles.Count == 0)
+                return;
+
+            var result = MessageBox.Show(
+                "This will clear the pending permissions list. Files will still have 'Permission: pending' tags " +
+                "until you update them individually. Are you sure?", 
+                "Clear All Pending", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                MetadataService.ClearAutoTaggedFiles();
+                _autoTaggedFiles.Clear();
+                PopulateFiles();
+                
+                var filesListBox = this.Controls.Find("filesListBox", false)[0] as ListBox;
+                var setPermissionsButton = this.Controls.Find("setPermissionsButton", false)[0] as Button;
+                if (setPermissionsButton != null)
+                    setPermissionsButton.Enabled = false;
+            }
+        }
+    }
 }

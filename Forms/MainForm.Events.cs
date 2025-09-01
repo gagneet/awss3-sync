@@ -294,6 +294,27 @@ namespace S3FileManager
             }
         }
 
+        private void ReviewPermissionsButton_Click(object sender, EventArgs e)
+        {
+            if (_currentUser.Role != UserRole.Administrator)
+            {
+                MessageBox.Show("Only administrators can review pending permissions.", "Access Denied", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var autoTaggedFiles = MetadataService.GetAutoTaggedFiles();
+            if (autoTaggedFiles.Count == 0)
+            {
+                MessageBox.Show("No files require permission review. All files have proper permission tags.", 
+                    "No Pending Permissions", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var reviewForm = new AdminPermissionReviewForm();
+            reviewForm.ShowDialog();
+        }
+
         #endregion
     }
 }
