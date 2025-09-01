@@ -11,7 +11,7 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.Core" Version="4.0.0.26" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.6.12" />
-    <PackageReference Include="AWSSDK.CognitoIdentity" Version="3.7.401.14" />
+    <PackageReference Include="AWSSDK.CognitoIdentity" Version="3.7.501.3" />
     <PackageReference Include="AWSSDK.CognitoIdentityProvider" Version="3.7.403.42" />
     <PackageReference Include="Amazon.Extensions.CognitoAuthentication" Version="2.5.5" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.8" />
