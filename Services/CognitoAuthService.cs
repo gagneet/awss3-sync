@@ -472,7 +472,57 @@ public CognitoAuthService()
             byte[] encrypted = Convert.FromBase64String(encryptedData);
             byte[] decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(decrypted);
+/// Encrypt data using Windows DPAPI
+        /// </summary>
+        private string EncryptData(string data)
+        {
+            try
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(data);
+                byte[] encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+                return Convert.ToBase64String(encrypted);
+            }
+            catch (CryptographicException ex)
+            {
+                // Log the error and return a fallback value or rethrow
+                Console.WriteLine($"Encryption failed: {ex.Message}");
+                return string.Empty;
+            }
+            catch (PlatformNotSupportedException ex)
+            {
+                // Log the error and return a fallback value or rethrow
+                Console.WriteLine($"Encryption not supported on this platform: {ex.Message}");
+                return string.Empty;
+            }
         }
+
+        /// <summary>
+        /// Decrypt data using Windows DPAPI
+        /// </summary>
+        private string DecryptData(string encryptedData)
+        {
+            try
+            {
+                byte[] encrypted = Convert.FromBase64String(encryptedData);
+                byte[] decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+                return Encoding.UTF8.GetString(decrypted);
+            }
+            catch (CryptographicException ex)
+            {
+                // Log the error and return a fallback value or rethrow
+                Console.WriteLine($"Decryption failed: {ex.Message}");
+                return string.Empty;
+            }
+            catch (PlatformNotSupportedException ex)
+            {
+                // Log the error and return a fallback value or rethrow
+                Console.WriteLine($"Decryption not supported on this platform: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Sign out current user
 
         /// <summary>
         /// Sign out current user
