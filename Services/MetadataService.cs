@@ -54,11 +54,30 @@ namespace S3FileManager.Services
 
         public async Task SetFileAccessRolesAsync(string key, List<UserRole> roles)
         {
-            var newTag = new Tag
+            List<Tag> currentTags = new List<Tag>();
+            try
+            {
+                var getTagsResponse = await _s3Client.GetObjectTaggingAsync(new GetObjectTaggingRequest
+                {
+                    BucketName = _bucketName,
+                    Key = key
+                });
+                currentTags = getTagsResponse.Tagging;
+            }
+            catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchTagSet")
+            {
+                // It's okay if there are no tags yet.
+            }
+
+            // Remove the existing roles tag if it's there
+            currentTags.RemoveAll(t => t.Key == RolesTagKey);
+
+            // Add the new roles tag
+            currentTags.Add(new Tag
             {
                 Key = RolesTagKey,
                 Value = string.Join(",", roles.Select(r => r.ToString()))
-            };
+            });
 
             var request = new PutObjectTaggingRequest
             {
@@ -66,7 +85,7 @@ namespace S3FileManager.Services
                 Key = key,
                 Tagging = new Tagging
                 {
-                    TagSet = new List<Tag> { newTag }
+                    TagSet = currentTags
                 }
             };
             await _s3Client.PutObjectTaggingAsync(request);
