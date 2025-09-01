@@ -2,24 +2,24 @@
 
 A comprehensive Windows desktop application for managing AWS S3 bucket files with role-based access control, hierarchical file navigation, and advanced permission management.
 
-![Application Screenshot](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-6.0+-purple) ![AWS](https://img.shields.io/badge/AWS-S3-orange)
+![Application Screenshot](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-8.0-purple) ![AWS](https://img.shields.io/badge/AWS-S3-orange)
 
 ## 🌟 Features
 
 ### 🔐 Role-Based Access Control
-- **Administrator**: Full access to all files, upload/download/delete capabilities, permission management
-- **Executive**: Can download files, upload to specific folders, access executive-only content
-- **User**: View-only access to specifically assigned files and folders
+- **Administrator**: Full access to all files, upload/download/delete capabilities, permission management.
+- **Executive**: Can download files, upload to specific folders, access executive-only content.
+- **User**: View-only access to specifically assigned files and folders.
 
 ### 🌲 Explorer-Like Interface
 - **Hierarchical Tree View**: Navigate local and S3 files and folders in a familiar parent-child structure.
 - **Lazy Loading for Local Files**: Efficiently browse large local directories without long initial load times.
 - **File Previewer**: Click on a file to see a preview of its content directly in the application. Supports common text and image formats.
-- **Visual Icons**: Clear distinction between folders (📁) and files (📄).
-- **Checkbox Selection**: Multi-select files and folders for batch operations like uploading, downloading, and deleting.
+- **Visual Icons**: Clear distinction between folders and files.
+- **Checkbox Selection**: Multi-select files and folders for batch operations.
 
 ### 📁 File Operations
-- **Upload**: Individual files or entire folder structures
+- **Upload**: Individual files or entire folder structures.
 - **Download**: Selective downloading of files and folders.
 - **Sync**: Synchronize local folders with an S3 bucket (Note: This feature is currently not fully implemented).
 - **Delete**: Enhanced confirmation system for permanent deletion.
@@ -30,11 +30,32 @@ A comprehensive Windows desktop application for managing AWS S3 bucket files wit
 - **Dynamic Access**: Real-time permission changes.
 - **Executive Upload Zones**: Predefined folders for Executive uploads.
 
+## 🏗️ Project Structure
+```
+AWSS3Sync/
+├── Models/
+│   ├── UserRole.cs          # User roles and User class
+│   ├── FileItem.cs          # Contains FileNode, LocalFileItem, S3FileItem models
+│   └── AppConfig.cs         # Configuration classes
+├── Services/
+│   ├── ConfigurationService.cs  # Config loading and validation
+│   ├── S3Service.cs             # S3 operations with role filtering
+│   ├── MetadataService.cs       # Permission management
+│   └── FileService.cs           # Local file utilities
+├── Forms/
+│   ├── LoginForm.cs             # User authentication
+│   ├── MainForm.cs              # Main application UI and partial classes
+│   ├── RoleSelectionForm.cs     # Permission assignment
+│   ├── ProgressForm.cs          # Progress display
+│   └── ... (other supporting forms)
+└── Program.cs               # Application entry point
+```
+
 ## 🚀 Getting Started
 
 ### Prerequisites
 - Windows 10/11
-- .NET 8.0 SDK or later (as specified in the build workflow)
+- .NET 8.0 SDK or later
 - Visual Studio 2022 (for development)
 - An active AWS Account with an S3 bucket and IAM user credentials.
 
@@ -45,7 +66,7 @@ cd AWSS3Sync
 ```
 
 ### 2. Configure AWS Settings
-Before running the application, you must create a configuration file named `appsettings.json` in the project's root directory (`AWSS3Sync/`).
+Before running the application, create a configuration file named `appsettings.json` in the project's root directory (`AWSS3Sync/`).
 
 **Important**: In Visual Studio, right-click the `appsettings.json` file in the Solution Explorer, select "Properties", and set **Copy to Output Directory** to **Copy if newer** or **Copy always**.
 
@@ -55,7 +76,7 @@ The file should contain your AWS credentials and S3 bucket details:
   "AWS": {
     "AccessKey": "YOUR_AWS_ACCESS_KEY_ID",
     "SecretKey": "YOUR_AWS_SECRET_ACCESS_KEY",
-    "Region": "your-s3-bucket-region", 
+    "Region": "your-s3-bucket-region",
     "BucketName": "your-s3-bucket-name"
   }
 }
@@ -95,11 +116,21 @@ The output will be located in `bin/Release/net8.0-windows/win-x64/publish/`. The
    - Check `Produce single file`.
 5. **Publish**: Click "Publish" to generate the executable in the specified folder.
 
-## 🤝 Contributing
+## 🔧 Troubleshooting
 
-Feel free to fork this repository, make enhancements, and submit pull requests.
-1. Fork the repository.
-2. Create your feature branch (`git checkout -b feature/YourAmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the branch (`git push origin feature/YourAmazingFeature`).
-5. Open a Pull Request.
+### "Configuration file not found"
+- Ensure `appsettings.json` is in the same directory as the .exe after publishing.
+- Check that "Copy to Output Directory" is set to "Copy if newer" or "Copy always" in Visual Studio.
+
+### "AWS Access Denied"
+- Verify your AWS credentials in `appsettings.json` are correct.
+- Check the IAM permissions for the user associated with the credentials.
+- Ensure the bucket name and region are correct.
+
+### "Application won't start"
+- If you published a framework-dependent version, ensure the correct .NET Desktop Runtime is installed on the target machine.
+- Check the Windows Event Viewer for any application errors.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

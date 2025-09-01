@@ -88,8 +88,8 @@ namespace S3FileManager.Services
                     var item = new S3FileItem
                     {
                         Key = obj.Key,
-                        Size = obj.Size,
-                        LastModified = obj.LastModified,
+                        Size = obj.Size ?? 0,
+                        LastModified = obj.LastModified ?? DateTime.MinValue,
                         AccessRoles = accessRoles
                     };
                     if (CanUserAccessFile(userRole, item))
@@ -98,48 +98,192 @@ namespace S3FileManager.Services
                     }
                 }
                 request.ContinuationToken = response.NextContinuationToken;
-            } while (response.IsTruncated);
+            } while (response.IsTruncated == true);
             files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
             return FilterFilesForRole(files, userRole);
         }
 
         private bool CanUserAccessFile(UserRole userRole, S3FileItem item)
         {
-            // ... (same as original)
-            return true;
+            switch (userRole)
+            {
+                case UserRole.Administrator:
+                    return true;
+                case UserRole.Executive:
+                    return item.AccessRoles.Contains(UserRole.Executive) ||
+                           item.AccessRoles.Contains(UserRole.Administrator) ||
+                           item.Key.StartsWith("executive-committee/");
+                case UserRole.User:
+                    return item.AccessRoles.Contains(UserRole.User);
+                default:
+                    return false;
+            }
         }
 
         private List<S3FileItem> FilterFilesForRole(List<S3FileItem> files, UserRole userRole)
         {
-            // ... (same as original)
-            return files;
+            if (userRole == UserRole.Administrator)
+                return files;
+
+            var filteredFiles = new List<S3FileItem>();
+            var accessiblePaths = new HashSet<string>();
+
+            foreach (var file in files)
+            {
+                if (CanUserAccessFile(userRole, file))
+                {
+                    filteredFiles.Add(file);
+                    var pathParts = file.Key.Split('/');
+                    var currentPath = "";
+                    for (int i = 0; i < pathParts.Length - 1; i++)
+                    {
+                        currentPath += pathParts[i] + "/";
+                        accessiblePaths.Add(currentPath);
+                    }
+                }
+            }
+
+            foreach (var path in accessiblePaths)
+            {
+                if (!filteredFiles.Any(f => f.Key == path))
+                {
+                    filteredFiles.Add(new S3FileItem
+                    {
+                        Key = path,
+                        Size = 0,
+                        LastModified = DateTime.Now,
+                        AccessRoles = new List<UserRole> { userRole }
+                    });
+                }
+            }
+
+            return filteredFiles.OrderBy(f => f.Key).ToList();
+        }
+
+        private class S3ObjectAttributes
+        {
+            public DateTime LastModified { get; set; }
+            public long Size { get; set; }
+        }
+
+        private async Task<S3ObjectAttributes> GetS3ObjectAttributesAsync(string key)
+        {
+            try
+            {
+                var request = new GetObjectMetadataRequest { BucketName = _bucketName, Key = key };
+                var metadata = await _s3Client.GetObjectMetadataAsync(request);
+                return new S3ObjectAttributes
+                {
+                    LastModified = metadata.LastModified.ToUniversalTime(),
+                    Size = metadata.ContentLength
+                };
+            }
+            catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
         }
 
         public async Task<bool> UploadFileAsync(string filePath, string key, List<UserRole> accessRoles)
         {
-            // ... (same as original)
-            return true;
+            var localFileInfo = new FileInfo(filePath);
+            var localFileLastWriteTimeUtc = localFileInfo.LastWriteTimeUtc;
+            var localFileSize = localFileInfo.Length;
+
+            var s3Attributes = await GetS3ObjectAttributesAsync(key);
+            bool performUpload = true;
+
+            if (s3Attributes != null)
+            {
+                if (localFileLastWriteTimeUtc <= s3Attributes.LastModified && localFileSize == s3Attributes.Size)
+                {
+                    performUpload = false;
+                }
+            }
+
+            if (performUpload)
+            {
+                var request = new PutObjectRequest
+                {
+                    BucketName = _bucketName,
+                    Key = key,
+                    FilePath = filePath,
+                    ContentType = GetContentType(filePath)
+                };
+                await _s3Client.PutObjectAsync(request);
+                await _metadataService.SetFileAccessRolesAsync(key, accessRoles);
+                return true;
+            }
+            return false;
         }
 
         public async Task UploadDirectoryAsync(string directoryPath, string keyPrefix, List<UserRole> accessRoles)
         {
-            // ... (same as original)
+            string cleanKeyPrefix = keyPrefix.Trim('/');
+            foreach (string file in Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = file.Substring(directoryPath.Length + 1).Replace('\\', '/');
+                string key = string.IsNullOrEmpty(cleanKeyPrefix) ? relativePath : $"{cleanKeyPrefix}/{relativePath}";
+                await UploadFileAsync(file, key, accessRoles);
+            }
         }
 
-        public async Task DownloadFileAsync(string s3Key, string localPath)
+        public async Task<string> DownloadFileAsync(string s3Key, string localDirectory)
         {
-            // ... (same as original)
+            string fileName = Path.GetFileName(s3Key);
+            if (string.IsNullOrEmpty(fileName))
+            {
+                fileName = Guid.NewGuid().ToString(); // Create a unique name if one can't be determined
+            }
+            string fullPath = Path.Combine(localDirectory, fileName);
+            Directory.CreateDirectory(localDirectory);
+
+            var request = new GetObjectRequest
+            {
+                BucketName = _bucketName,
+                Key = s3Key
+            };
+
+            using (var response = await _s3Client.GetObjectAsync(request))
+            using (var responseStream = response.ResponseStream)
+            using (var fileStream = File.Create(fullPath))
+            {
+                await responseStream.CopyToAsync(fileStream);
+            }
+            return fullPath;
         }
 
         public async Task DeleteFileAsync(string s3Key)
         {
-            // ... (same as original)
+            var request = new DeleteObjectRequest
+            {
+                BucketName = _bucketName,
+                Key = s3Key
+            };
+            await _s3Client.DeleteObjectAsync(request);
+            await _metadataService.RemoveFileAccessRolesAsync(s3Key);
         }
 
         private string GetContentType(string filePath)
         {
-            // ... (same as original)
-            return "";
+            string extension = Path.GetExtension(filePath).ToLowerInvariant();
+            switch (extension)
+            {
+                case ".txt": return "text/plain";
+                case ".html": case ".htm": return "text/html";
+                case ".css": return "text/css";
+                case ".js": return "application/javascript";
+                case ".json": return "application/json";
+                case ".xml": return "application/xml";
+                case ".pdf": return "application/pdf";
+                case ".jpg": case ".jpeg": return "image/jpeg";
+                case ".png": return "image/png";
+                case ".gif": return "image/gif";
+                case ".bmp": return "image/bmp";
+                case ".svg": return "image/svg+xml";
+                case ".zip": return "application/zip";
+                default: return "application/octet-stream";
+            }
         }
 
         public void Dispose()
