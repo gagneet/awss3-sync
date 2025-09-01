@@ -18,8 +18,8 @@ namespace S3FileManager
         private readonly S3Service _s3Service;
         private readonly FileService _fileService;
         private string _selectedLocalPath = "";
-        private List<LocalFileItem> _localFiles = new List<LocalFileItem>();
-        private List<S3FileItem> _s3Files = new List<S3FileItem>();
+        private List<FileNode> _localFiles = new List<FileNode>();
+        private List<FileNode> _s3Files = new List<FileNode>();
 
         // Performance optimization: Cache and selection tracking
         private readonly Dictionary<string, bool> _s3CheckedItems = new Dictionary<string, bool>();
@@ -42,8 +42,14 @@ namespace S3FileManager
 
             this.AutoScaleDimensions = new SizeF(8F, 16F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(1400, 900);
+            this.ClientSize = new Size(1800, 900); // Increased width for preview panel
             this.StartPosition = FormStartPosition.CenterScreen;
+
+            var splitContainer = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                SplitterDistance = 1200
+            };
 
             var mainPanel = new TableLayoutPanel
             {
@@ -61,8 +67,24 @@ namespace S3FileManager
             var rightPanel = CreateS3Panel();
             mainPanel.Controls.Add(rightPanel, 1, 0);
 
-            this.Controls.Add(mainPanel);
+            var previewPanel = CreatePreviewPanel();
+
+            splitContainer.Panel1.Controls.Add(mainPanel);
+            splitContainer.Panel2.Controls.Add(previewPanel);
+
+            this.Controls.Add(splitContainer);
             this.ResumeLayout(false);
+        }
+
+        private Panel CreatePreviewPanel()
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var headerLabel = new Label { Text = "File Preview", Font = new Font("Arial", 12, FontStyle.Bold), Location = new Point(10, 10), Size = new Size(400, 25) };
+            var previewInfoLabel = new Label { Name = "previewInfoLabel", Text = "Select a file to preview", Location = new Point(10, 40), Size = new Size(400, 50), ForeColor = Color.Gray };
+            var previewTextBox = new RichTextBox { Name = "previewTextBox", Location = new Point(10, 100), Size = new Size(550, 750), ScrollBars = RichTextBoxScrollBars.Vertical, ReadOnly = true, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
+            var previewPictureBox = new PictureBox { Name = "previewPictureBox", Location = new Point(10, 100), Size = new Size(550, 750), SizeMode = PictureBoxSizeMode.Zoom, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
+            panel.Controls.AddRange(new Control[] { headerLabel, previewInfoLabel, previewTextBox, previewPictureBox });
+            return panel;
         }
 
         private Panel CreateLocalPanel()
@@ -100,8 +122,8 @@ namespace S3FileManager
 
             // Event handlers
             localTreeView.BeforeExpand += LocalTreeView_BeforeExpand;
-            localTreeView.AfterCheck += LocalTreeView_AfterCheck;
-            localTreeView.BeforeCheck += LocalTreeView_BeforeCheck;
+            localTreeView.AfterCheck += TreeView_AfterCheck;
+            localTreeView.AfterSelect += TreeView_AfterSelect;
 
             var buttonY = 530;
             var browseButton = new Button
@@ -182,10 +204,8 @@ namespace S3FileManager
             };
 
             // Event handlers
-            s3TreeView.AfterCheck += S3TreeView_AfterCheck;
-            s3TreeView.BeforeCheck += S3TreeView_BeforeCheck;
-            s3TreeView.BeforeExpand += S3TreeView_BeforeExpand;
-            s3TreeView.AfterExpand += S3TreeView_AfterExpand;
+            s3TreeView.AfterCheck += TreeView_AfterCheck;
+            s3TreeView.AfterSelect += TreeView_AfterSelect;
 
             var buttonY = 530;
             var listButton = new Button

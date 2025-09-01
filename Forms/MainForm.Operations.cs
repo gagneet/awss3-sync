@@ -123,44 +123,27 @@ namespace S3FileManager
             s3TreeView.Nodes.Clear();
             _s3CheckedItems.Clear();
 
-            var topLevelItems = _s3Files
-                .Where(f => !f.Key.TrimEnd('/').Contains('/'))
-                .OrderBy(f => f.Key)
-                .ToList();
-
-            var prefixes = _s3Files
-                .Where(f => f.Key.TrimEnd('/').Contains('/'))
-                .Select(f => f.Key.Split('/')[0] + "/")
-                .Distinct()
-                .OrderBy(p => p)
-                .ToList();
-
-            foreach (var prefix in prefixes)
+            foreach (var fileNode in _s3Files)
             {
-                 if (!topLevelItems.Any(i => i.Key == prefix))
-                 {
-                    topLevelItems.Add(new S3FileItem { Key = prefix, IsDirectory = true, LastModified = DateTime.MinValue });
-                 }
-            }
-
-            foreach (var item in topLevelItems.OrderBy(i => i.Key))
-            {
-                var node = new TreeNode(item.DisplayName)
-                {
-                    Tag = new FileNode(item.DisplayName, item.Key, item.IsDirectory, item.Size, item.LastModified, item.AccessRoles)
-                };
-                if (item.IsDirectory)
-                {
-                    // Check if there are any children for this prefix
-                    if (_s3Files.Any(f => f.Key.StartsWith(item.Key) && f.Key != item.Key))
-                    {
-                        node.Nodes.Add(new TreeNode("Loading..."));
-                    }
-                }
-                s3TreeView.Nodes.Add(node);
+                var treeNode = new TreeNode(fileNode.Name) { Tag = fileNode };
+                s3TreeView.Nodes.Add(treeNode);
+                AddChildTreeNodes(treeNode, fileNode.Children);
             }
 
             UpdateS3SelectionCount();
+        }
+
+        private void AddChildTreeNodes(TreeNode parentTreeNode, List<FileNode> children)
+        {
+            foreach (var fileNode in children)
+            {
+                var treeNode = new TreeNode(fileNode.Name) { Tag = fileNode };
+                parentTreeNode.Nodes.Add(treeNode);
+                if (fileNode.Children.Any())
+                {
+                    AddChildTreeNodes(treeNode, fileNode.Children);
+                }
+            }
         }
 
         private List<FileNode> GetCheckedS3Items()
