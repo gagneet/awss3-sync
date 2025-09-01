@@ -44,7 +44,9 @@ namespace S3FileManager
                 string filePathToRead = fileNode.Path;
                 if (fileNode.IsS3)
                 {
-                    tempFilePath = await _s3Service.DownloadFileAsync(fileNode.Path, Path.GetTempPath());
+                    string tempPreviewDir = Path.Combine(Path.GetTempPath(), "AWSS3Sync_Previews");
+                    Directory.CreateDirectory(tempPreviewDir);
+                    tempFilePath = await _s3Service.DownloadFileAsync(fileNode.Path, tempPreviewDir);
                     filePathToRead = tempFilePath;
                 }
 

@@ -220,11 +220,28 @@ namespace S3FileManager.Services
         public async Task UploadDirectoryAsync(string directoryPath, string keyPrefix, List<UserRole> accessRoles)
         {
             string cleanKeyPrefix = keyPrefix.Trim('/');
-            foreach (string file in Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories))
+
+            try
             {
-                string relativePath = file.Substring(directoryPath.Length + 1).Replace('\\', '/');
-                string key = string.IsNullOrEmpty(cleanKeyPrefix) ? relativePath : $"{cleanKeyPrefix}/{relativePath}";
-                await UploadFileAsync(file, key, accessRoles);
+                // Upload files in the current directory
+                foreach (string file in Directory.GetFiles(directoryPath))
+                {
+                    string fileName = Path.GetFileName(file);
+                    string key = string.IsNullOrEmpty(cleanKeyPrefix) ? fileName : $"{cleanKeyPrefix}/{fileName}";
+                    await UploadFileAsync(file, key, accessRoles);
+                }
+
+                // Recursively upload subdirectories
+                foreach (string subDir in Directory.GetDirectories(directoryPath))
+                {
+                    string dirName = Path.GetFileName(subDir);
+                    string newKeyPrefix = string.IsNullOrEmpty(cleanKeyPrefix) ? dirName : $"{cleanKeyPrefix}/{dirName}";
+                    await UploadDirectoryAsync(subDir, newKeyPrefix, accessRoles);
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Skip directories that we don't have permission to access
             }
         }
 
@@ -266,24 +283,23 @@ namespace S3FileManager.Services
 
         private string GetContentType(string filePath)
         {
-            string extension = Path.GetExtension(filePath).ToLowerInvariant();
-            switch (extension)
+            return Path.GetExtension(filePath).ToLowerInvariant() switch
             {
-                case ".txt": return "text/plain";
-                case ".html": case ".htm": return "text/html";
-                case ".css": return "text/css";
-                case ".js": return "application/javascript";
-                case ".json": return "application/json";
-                case ".xml": return "application/xml";
-                case ".pdf": return "application/pdf";
-                case ".jpg": case ".jpeg": return "image/jpeg";
-                case ".png": return "image/png";
-                case ".gif": return "image/gif";
-                case ".bmp": return "image/bmp";
-                case ".svg": return "image/svg+xml";
-                case ".zip": return "application/zip";
-                default: return "application/octet-stream";
-            }
+                ".txt" => "text/plain",
+                ".html" or ".htm" => "text/html",
+                ".css" => "text/css",
+                ".js" => "application/javascript",
+                ".json" => "application/json",
+                ".xml" => "application/xml",
+                ".pdf" => "application/pdf",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".bmp" => "image/bmp",
+                ".svg" => "image/svg+xml",
+                ".zip" => "application/zip",
+                _ => "application/octet-stream",
+            };
         }
 
         public void Dispose()
