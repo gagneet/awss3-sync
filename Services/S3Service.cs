@@ -145,7 +145,7 @@ namespace AWSS3Sync.Services
             public long Size { get; set; }
         }
 
-        private async Task<S3ObjectAttributes> GetS3ObjectAttributesAsync(string key)
+        private async Task<S3ObjectAttributes?> GetS3ObjectAttributesAsync(string key)
         {
             try
             {
@@ -353,7 +353,7 @@ namespace AWSS3Sync.Services
                     versions.Add(new FileNode(
                         version.Key,
                         version.Key,
-                        false,
+                        version.Size,
                         version.LastModified ?? DateTime.UtcNow,
                         version.VersionId
                     ));

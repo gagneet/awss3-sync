@@ -21,11 +21,11 @@ namespace AWSS3Sync
             var previewPictureBox = this.Controls.Find("previewPictureBox", true).FirstOrDefault() as PictureBox;
 
             // Reset preview controls
-            previewInfoLabel.Visible = true;
-            previewTextBox.Visible = false;
-            previewPictureBox.Visible = false;
-            previewTextBox.Clear();
-            if (previewPictureBox.Image != null)
+            if (previewInfoLabel != null) previewInfoLabel.Visible = true;
+            if (previewTextBox != null) previewTextBox.Visible = false;
+            if (previewPictureBox != null) previewPictureBox.Visible = false;
+            previewTextBox?.Clear();
+            if (previewPictureBox?.Image != null)
             {
                 previewPictureBox.Image.Dispose();
                 previewPictureBox.Image = null;
@@ -33,13 +33,13 @@ namespace AWSS3Sync
 
             if (fileNode.IsDirectory)
             {
-                previewInfoLabel.Text = $"Directory: {fileNode.Name}";
+                if (previewInfoLabel != null) previewInfoLabel.Text = $"Directory: {fileNode.Name}";
                 return;
             }
 
-            previewInfoLabel.Text = $"File: {fileNode.Name}\nSize: {_fileService.FormatFileSize(fileNode.Size)}\nLast Modified: {fileNode.LastModified}";
+            if (previewInfoLabel != null) previewInfoLabel.Text = $"File: {fileNode.Name}\nSize: {_fileService.FormatFileSize(fileNode.Size)}\nLast Modified: {fileNode.LastModified}";
 
-            string tempFilePath = null;
+            string? tempFilePath = null;
             try
             {
                 string filePathToRead = fileNode.Path;
@@ -54,27 +54,30 @@ namespace AWSS3Sync
                 var extension = Path.GetExtension(fileNode.Name).ToLowerInvariant();
                 if (new[] { ".txt", ".log", ".json", ".xml", ".cs", ".js", ".html", ".css" }.Contains(extension))
                 {
-                    previewTextBox.Text = File.ReadAllText(filePathToRead);
-                    previewTextBox.Visible = true;
-                    previewInfoLabel.Visible = false;
+                    if (previewTextBox != null)
+                    {
+                        previewTextBox.Text = File.ReadAllText(filePathToRead);
+                        previewTextBox.Visible = true;
+                    }
+                    if (previewInfoLabel != null) previewInfoLabel.Visible = false;
                 }
                 else if (new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" }.Contains(extension))
                 {
                     using (var stream = new MemoryStream(File.ReadAllBytes(filePathToRead)))
                     {
-                        previewPictureBox.Image = Image.FromStream(stream);
+                        if (previewPictureBox != null) previewPictureBox.Image = Image.FromStream(stream);
                     }
-                    previewPictureBox.Visible = true;
-                    previewInfoLabel.Visible = false;
+                    if (previewPictureBox != null) previewPictureBox.Visible = true;
+                    if (previewInfoLabel != null) previewInfoLabel.Visible = false;
                 }
                 else
                 {
-                    previewInfoLabel.Text += "\n\nPreview for this file type is not supported.";
+                    if (previewInfoLabel != null) previewInfoLabel.Text += "\n\nPreview for this file type is not supported.";
                 }
             }
             catch (Exception ex)
             {
-                previewInfoLabel.Text += $"\n\nError loading preview: {ex.Message}";
+                if (previewInfoLabel != null) previewInfoLabel.Text += $"\n\nError loading preview: {ex.Message}";
             }
             finally
             {
@@ -100,18 +103,21 @@ namespace AWSS3Sync
         {
             if (e.Button == MouseButtons.Right)
             {
-                var treeView = sender as TreeView;
-                var node = treeView.GetNodeAt(e.X, e.Y);
-                if (node != null)
+                if (sender is TreeView treeView)
                 {
-                    treeView.SelectedNode = node;
+                    var node = treeView.GetNodeAt(e.X, e.Y);
+                    if (node != null)
+                    {
+                        treeView.SelectedNode = node;
+                    }
                 }
             }
         }
 
         private void S3ContextMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
         {
-            var menu = sender as ContextMenuStrip;
+            if (sender is not ContextMenuStrip menu) return;
+
             var treeView = menu.SourceControl as TreeView;
             var selectedNode = treeView?.SelectedNode;
 
@@ -197,7 +203,7 @@ namespace AWSS3Sync
             foreach (TreeNode node in treeNode.Nodes)
             {
                 node.Checked = nodeChecked;
-                if (node.Tag is FileNode fileNode)
+                if (node.Tag is FileNode fileNode && treeNode.TreeView != null)
                 {
                      var isLocal = treeNode.TreeView.Name == "localTreeView";
                      var checkedItems = isLocal ? _localCheckedItems : _s3CheckedItems;
@@ -248,11 +254,17 @@ namespace AWSS3Sync
                 var selectedS3Node = s3TreeView?.SelectedNode;
                 var s3Dir = selectedS3Node?.Tag as FileNode;
 
+                if (s3Dir == null)
+                {
+                    MessageBox.Show("Could not determine the S3 destination directory. Please select an S3 folder.", "Destination Missing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 foreach (var result in toUpload)
                 {
                     var s3Key = Path.Combine(s3Dir.Path, result.RelativePath).Replace('\\', '/');
                     var roles = new List<UserRole> { _currentUser.Role };
-                    await _s3Service.UploadFileAsync(result.LocalFile.Path, s3Key, roles);
+                    await _s3Service.UploadFileAsync(result.LocalFile!.Path, s3Key, roles);
                 }
                 MessageBox.Show("Delta upload complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -307,15 +319,24 @@ namespace AWSS3Sync
                 var selectedLocalNode = localTreeView?.SelectedNode;
                 var localDir = selectedLocalNode?.Tag as FileNode;
 
+                if (localDir == null)
+                {
+                    MessageBox.Show("Could not determine the local destination directory. Please select a local folder.", "Destination Missing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 foreach (var result in toDownload)
                 {
                     var localPath = Path.Combine(localDir.Path, result.RelativePath);
                     var localDirForFile = Path.GetDirectoryName(localPath);
-                    if (!Directory.Exists(localDirForFile))
+                    if (localDirForFile != null)
                     {
-                        Directory.CreateDirectory(localDirForFile);
+                        if (!Directory.Exists(localDirForFile))
+                        {
+                            Directory.CreateDirectory(localDirForFile);
+                        }
+                        await _s3Service.DownloadFileAsync(result.S3File!.Path, localDirForFile);
                     }
-                    await _s3Service.DownloadFileAsync(result.S3File.Path, localDirForFile);
                 }
                 MessageBox.Show("Delta download complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
