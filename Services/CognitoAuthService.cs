@@ -447,17 +447,6 @@ namespace S3FileManager.Services
         }
 
         /// <summary>
-        /// Encrypt data using Windows DPAPI
-        /// </summary>
-        private string EncryptData(string data)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(data);
-            byte[] encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
-            return Convert.ToBase64String(encrypted);
-        }
-
-        /// <summary>
-        /// Decrypt data using Windows DPAPI
         /// <summary>
         /// Encrypt data using Windows DPAPI
         /// </summary>
