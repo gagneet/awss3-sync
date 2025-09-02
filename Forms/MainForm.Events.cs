@@ -16,10 +16,6 @@ namespace AWSS3Sync
             var fileNode = e.Node?.Tag as FileNode;
             if (fileNode == null) return;
 
-            var previewInfoLabel = this.Controls.Find("previewInfoLabel", true).FirstOrDefault() as Label;
-            var previewTextBox = this.Controls.Find("previewTextBox", true).FirstOrDefault() as RichTextBox;
-            var previewPictureBox = this.Controls.Find("previewPictureBox", true).FirstOrDefault() as PictureBox;
-
             // Reset preview controls
             previewInfoLabel.Visible = true;
             previewTextBox.Visible = false;
@@ -39,7 +35,7 @@ namespace AWSS3Sync
 
             previewInfoLabel.Text = $"File: {fileNode.Name}\nSize: {_fileService.FormatFileSize(fileNode.Size)}\nLast Modified: {fileNode.LastModified}";
 
-            string tempFilePath = null;
+            string? tempFilePath = null;
             try
             {
                 string filePathToRead = fileNode.Path;
@@ -100,18 +96,21 @@ namespace AWSS3Sync
         {
             if (e.Button == MouseButtons.Right)
             {
-                var treeView = sender as TreeView;
-                var node = treeView.GetNodeAt(e.X, e.Y);
-                if (node != null)
+                if (sender is TreeView treeView)
                 {
-                    treeView.SelectedNode = node;
+                    var node = treeView.GetNodeAt(e.X, e.Y);
+                    if (node != null)
+                    {
+                        treeView.SelectedNode = node;
+                    }
                 }
             }
         }
 
         private void S3ContextMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
         {
-            var menu = sender as ContextMenuStrip;
+            if (sender is not ContextMenuStrip menu) return;
+
             var treeView = menu.SourceControl as TreeView;
             var selectedNode = treeView?.SelectedNode;
 
@@ -197,7 +196,7 @@ namespace AWSS3Sync
             foreach (TreeNode node in treeNode.Nodes)
             {
                 node.Checked = nodeChecked;
-                if (node.Tag is FileNode fileNode)
+                if (node.Tag is FileNode fileNode && treeNode.TreeView != null)
                 {
                      var isLocal = treeNode.TreeView.Name == "localTreeView";
                      var checkedItems = isLocal ? _localCheckedItems : _s3CheckedItems;
@@ -248,11 +247,20 @@ namespace AWSS3Sync
                 var selectedS3Node = s3TreeView?.SelectedNode;
                 var s3Dir = selectedS3Node?.Tag as FileNode;
 
+                if (s3Dir == null)
+                {
+                    MessageBox.Show("Could not determine the S3 destination directory. Please select an S3 folder.", "Destination Missing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 foreach (var result in toUpload)
                 {
-                    var s3Key = Path.Combine(s3Dir.Path, result.RelativePath).Replace('\\', '/');
-                    var roles = new List<UserRole> { _currentUser.Role };
-                    await _s3Service.UploadFileAsync(result.LocalFile.Path, s3Key, roles);
+                    if (result.LocalFile != null)
+                    {
+                        var s3Key = Path.Combine(s3Dir.Path, result.RelativePath).Replace('\\', '/');
+                        var roles = new List<UserRole> { _currentUser.Role };
+                        await _s3Service.UploadFileAsync(result.LocalFile.Path, s3Key, roles);
+                    }
                 }
                 MessageBox.Show("Delta upload complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -307,15 +315,27 @@ namespace AWSS3Sync
                 var selectedLocalNode = localTreeView?.SelectedNode;
                 var localDir = selectedLocalNode?.Tag as FileNode;
 
+                if (localDir == null)
+                {
+                    MessageBox.Show("Could not determine the local destination directory. Please select a local folder.", "Destination Missing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 foreach (var result in toDownload)
                 {
-                    var localPath = Path.Combine(localDir.Path, result.RelativePath);
-                    var localDirForFile = Path.GetDirectoryName(localPath);
-                    if (!Directory.Exists(localDirForFile))
+                    if (result.S3File != null)
                     {
-                        Directory.CreateDirectory(localDirForFile);
+                        var localPath = Path.Combine(localDir.Path, result.RelativePath);
+                        var localDirForFile = Path.GetDirectoryName(localPath);
+                        if (localDirForFile != null)
+                        {
+                            if (!Directory.Exists(localDirForFile))
+                            {
+                                Directory.CreateDirectory(localDirForFile);
+                            }
+                            await _s3Service.DownloadFileAsync(result.S3File.Path, localDirForFile);
+                        }
                     }
-                    await _s3Service.DownloadFileAsync(result.S3File.Path, localDirForFile);
                 }
                 MessageBox.Show("Delta download complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

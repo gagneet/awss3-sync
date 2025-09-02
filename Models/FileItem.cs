@@ -30,7 +30,7 @@ namespace AWSS3Sync.Models
         public long Size { get; set; }
         public DateTime LastModified { get; set; }
         public List<UserRole> AccessRoles { get; set; } = new List<UserRole>();
-        public string VersionId { get; set; }
+        public string VersionId { get; set; } = string.Empty;
         public List<FileNode> Children { get; set; } = new List<FileNode>();
         public bool IsS3 { get; set; }
 

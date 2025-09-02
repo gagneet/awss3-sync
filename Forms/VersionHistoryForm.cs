@@ -13,8 +13,8 @@ namespace AWSS3Sync.Forms
         private readonly string _s3Key;
         private readonly List<FileNode> _versions;
 
-        private ListView listViewVersions;
-        private Button btnDownload;
+        private ListView listViewVersions = null!;
+        private Button btnDownload = null!;
 
         public VersionHistoryForm(string s3Key, List<FileNode> versions, S3Service s3Service, FileService fileService)
         {
@@ -68,7 +68,7 @@ namespace AWSS3Sync.Forms
             }
         }
 
-        private async void BtnDownload_Click(object sender, EventArgs e)
+        private async void BtnDownload_Click(object? sender, EventArgs e)
         {
             if (listViewVersions.SelectedItems.Count == 0)
             {

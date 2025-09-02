@@ -13,7 +13,7 @@ namespace AWSS3Sync.Services
     public class UserService
     {
         private readonly string _usersFilePath;
-        private List<UserCredentials> _users;
+        private List<UserCredentials> _users = new List<UserCredentials>();
 
         public UserService()
         {
@@ -26,7 +26,7 @@ namespace AWSS3Sync.Services
             if (File.Exists(_usersFilePath))
             {
                 var json = File.ReadAllText(_usersFilePath);
-                _users = JsonConvert.DeserializeObject<List<UserCredentials>>(json);
+                _users = JsonConvert.DeserializeObject<List<UserCredentials>>(json) ?? new List<UserCredentials>();
             }
             else
             {
@@ -47,7 +47,7 @@ namespace AWSS3Sync.Services
             File.WriteAllText(_usersFilePath, json);
         }
 
-        public User ValidateUser(string username, string password)
+        public User? ValidateUser(string username, string password)
         {
             var userCredentials = _users.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
 
@@ -85,8 +85,8 @@ namespace AWSS3Sync.Services
 
     public class UserCredentials
     {
-        public string Username { get; set; }
-        public string PasswordHash { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string PasswordHash { get; set; } = string.Empty;
         public UserRole Role { get; set; }
     }
 }

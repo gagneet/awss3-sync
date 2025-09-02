@@ -11,10 +11,10 @@ namespace AWSS3Sync.Models
 
     public class FileComparisonResult
     {
-        public string RelativePath { get; set; }
-        public string FileName { get; set; }
+        public string RelativePath { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
         public ComparisonStatus Status { get; set; }
-        public FileNode LocalFile { get; set; }
-        public FileNode S3File { get; set; }
+        public FileNode? LocalFile { get; set; }
+        public FileNode? S3File { get; set; }
     }
 }

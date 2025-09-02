@@ -145,7 +145,12 @@ namespace AWSS3Sync.Services
             public long Size { get; set; }
         }
 
-        private async Task<S3ObjectAttributes> GetS3ObjectAttributesAsync(string key)
+        /// <summary>
+        /// Gets the metadata attributes (LastModified and Size) for an S3 object.
+        /// </summary>
+        /// <param name="key">The key of the S3 object.</param>
+        /// <returns>An <see cref="S3ObjectAttributes"/> object, or <c>null</c> if the object is not found.</returns>
+        private async Task<S3ObjectAttributes?> GetS3ObjectAttributesAsync(string key)
         {
             try
             {
@@ -354,6 +359,7 @@ namespace AWSS3Sync.Services
                         version.Key,
                         version.Key,
                         false,
+                        version.Size,
                         version.LastModified ?? DateTime.UtcNow,
                         version.VersionId
                     ));
