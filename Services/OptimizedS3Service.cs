@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -176,12 +177,8 @@ namespace S3FileManager.Services
             
             try
             {
-try
-            {
                 if (!File.Exists(filePath)) throw new FileNotFoundException($"File not found: {filePath}");
                 var fileInfo = new FileInfo(filePath);
-                
-                // Check if file needs to be uploaded using cached metadata
                 
                 // Check if file needs to be uploaded using cached metadata
                 if (_performanceConfig.EnableMetadataCache)
@@ -315,104 +312,12 @@ try
             try
             {
                 var fileName = Path.GetFileName(s3Key);
-// Import Path from System.IO.Path for path sanitization
-        // Import Path.GetFullPath() to resolve relative paths to absolute paths
-        public async Task DownloadFileAsync(string s3Key, string localPath, 
-            IProgress<double>? progress = null, CancellationToken cancellationToken = default)
-        {
-            await _downloadSemaphore.WaitAsync(cancellationToken);
-            
-            try
-            {
-                var fileName = Path.GetFileName(s3Key);
-                var sanitizedLocalPath = Path.GetFullPath(localPath);
-                var fullPath = Path.Combine(sanitizedLocalPath, fileName);
-                
-                // Ensure the sanitized path is within the intended directory
-                if (!fullPath.StartsWith(sanitizedLocalPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new ArgumentException("Invalid local path");
-                }
-                
-                // Create directory if it doesn't exist
-                Directory.CreateDirectory(sanitizedLocalPath);
-                
-                // Rest of the method remains unchanged
-                // ...
-            }
-            finally
-            {
-                _downloadSemaphore.Release();
-            }
-                
-                // Create directory if it doesn't exist
-                Directory.CreateDirectory(localPath);
-                
-                // Get object metadata
-                var metadataRequest = new GetObjectMetadataRequest
-                {
-                    BucketName = _bucketName,
-                    Key = s3Key
-                };
-                
-                var metadata = await _s3Client.GetObjectMetadataAsync(metadataRequest, cancellationToken);
-                
-                // Use transfer utility for optimized download
-                if (metadata.ContentLength > _performanceConfig.ChunkSizeBytes)
-                {
-                    var downloadRequest = new TransferUtilityDownloadRequest
-                    {
-                        BucketName = _bucketName,
-                        Key = s3Key,
-                        FilePath = fullPath
-                    };
-                    
-                    // Track download progress
-                    if (progress != null)
-                    {
-                        downloadRequest.WriteObjectProgressEvent += (sender, args) =>
-                        {
-                            progress.Report((double)args.TransferredBytes / args.TotalBytes * 100);
-                        };
-                    }
-                    
-                    await _transferUtility.DownloadAsync(downloadRequest, cancellationToken);
-                }
-                else
-                {
-                    // Use simple download for small files
-                    var getRequest = new GetObjectRequest
-                    {
-                        BucketName = _bucketName,
-                        Key = s3Key
-                    };
-                    
-                    using (var response = await _s3Client.GetObjectAsync(getRequest, cancellationToken))
-                    using (var fileStream = File.Create(fullPath))
-                    {
-                        await response.ResponseStream.CopyToAsync(fileStream, 81920, cancellationToken);
-                    }
-                }
-                
-                // Set file timestamps to match S3
-// Import System.Security for SecurityException
-        // This is used to throw a security exception when an invalid file path is detected
-        using System.Security;
-
-        public async Task DownloadFileAsync(string s3Key, string localPath, 
-            IProgress<double>? progress = null, CancellationToken cancellationToken = default)
-        {
-            await _downloadSemaphore.WaitAsync(cancellationToken);
-            
-            try
-            {
-                var fileName = Path.GetFileName(s3Key);
                 var fullPath = Path.Combine(localPath, fileName);
 
                 // Validate the file path
                 if (!fullPath.StartsWith(Path.GetFullPath(localPath)) || fullPath.Contains(".."))
                 {
-                    throw new SecurityException("Invalid file path detected.");
+                    throw new ArgumentException("Invalid file path detected.");
                 }
                 
                 // Create directory if it doesn't exist
@@ -509,21 +414,7 @@ try
             }
             else
             {
-}
-            else
-            {
-                // Validate and sanitize the localPath
-                string fullPath = Path.GetFullPath(localPath);
-                if (!fullPath.StartsWith(Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)))
-                {
-                    throw new ArgumentException("Invalid local path");
-                }
-                Directory.CreateDirectory(fullPath);
-            }
-            
-            // Rest of the code remains unchanged
-            // ...
-        }
+                Directory.CreateDirectory(localPath);
             }
             
             // Determine files to download, skip, and delete
