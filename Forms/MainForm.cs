@@ -27,6 +27,11 @@ namespace AWSS3Sync
         private readonly Dictionary<string, bool> _s3CheckedItems = new Dictionary<string, bool>();
         private readonly Dictionary<string, bool> _localCheckedItems = new Dictionary<string, bool>();
 
+        // UI controls that need to be accessed across methods
+        private Label previewInfoLabel = null!;
+        private RichTextBox previewTextBox = null!;
+        private PictureBox previewPictureBox = null!;
+
         public MainForm(User currentUser)
         {
             _currentUser = currentUser;
@@ -86,9 +91,11 @@ namespace AWSS3Sync
         {
             var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
             var headerLabel = new Label { Text = "File Preview", Font = new Font("Arial", 12, FontStyle.Bold), Location = new Point(10, 10), Size = new Size(400, 25) };
-            var previewInfoLabel = new Label { Name = "previewInfoLabel", Text = "Select a file to preview", Location = new Point(10, 40), Size = new Size(400, 50), ForeColor = Color.Gray };
-            var previewTextBox = new RichTextBox { Name = "previewTextBox", Location = new Point(10, 100), Size = new Size(550, 750), ScrollBars = RichTextBoxScrollBars.Vertical, ReadOnly = true, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
-            var previewPictureBox = new PictureBox { Name = "previewPictureBox", Location = new Point(10, 100), Size = new Size(550, 750), SizeMode = PictureBoxSizeMode.Zoom, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
+
+            previewInfoLabel = new Label { Name = "previewInfoLabel", Text = "Select a file to preview", Location = new Point(10, 40), Size = new Size(400, 50), ForeColor = Color.Gray };
+            previewTextBox = new RichTextBox { Name = "previewTextBox", Location = new Point(10, 100), Size = new Size(550, 750), ScrollBars = RichTextBoxScrollBars.Vertical, ReadOnly = true, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
+            previewPictureBox = new PictureBox { Name = "previewPictureBox", Location = new Point(10, 100), Size = new Size(550, 750), SizeMode = PictureBoxSizeMode.Zoom, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
+
             panel.Controls.AddRange(new Control[] { headerLabel, previewInfoLabel, previewTextBox, previewPictureBox });
             return panel;
         }

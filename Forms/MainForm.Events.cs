@@ -16,16 +16,12 @@ namespace AWSS3Sync
             var fileNode = e.Node?.Tag as FileNode;
             if (fileNode == null) return;
 
-            var previewInfoLabel = this.Controls.Find("previewInfoLabel", true).FirstOrDefault() as Label;
-            var previewTextBox = this.Controls.Find("previewTextBox", true).FirstOrDefault() as RichTextBox;
-            var previewPictureBox = this.Controls.Find("previewPictureBox", true).FirstOrDefault() as PictureBox;
-
             // Reset preview controls
-            if (previewInfoLabel != null) previewInfoLabel.Visible = true;
-            if (previewTextBox != null) previewTextBox.Visible = false;
-            if (previewPictureBox != null) previewPictureBox.Visible = false;
-            previewTextBox?.Clear();
-            if (previewPictureBox?.Image != null)
+            previewInfoLabel.Visible = true;
+            previewTextBox.Visible = false;
+            previewPictureBox.Visible = false;
+            previewTextBox.Clear();
+            if (previewPictureBox.Image != null)
             {
                 previewPictureBox.Image.Dispose();
                 previewPictureBox.Image = null;
@@ -33,11 +29,11 @@ namespace AWSS3Sync
 
             if (fileNode.IsDirectory)
             {
-                if (previewInfoLabel != null) previewInfoLabel.Text = $"Directory: {fileNode.Name}";
+                previewInfoLabel.Text = $"Directory: {fileNode.Name}";
                 return;
             }
 
-            if (previewInfoLabel != null) previewInfoLabel.Text = $"File: {fileNode.Name}\nSize: {_fileService.FormatFileSize(fileNode.Size)}\nLast Modified: {fileNode.LastModified}";
+            previewInfoLabel.Text = $"File: {fileNode.Name}\nSize: {_fileService.FormatFileSize(fileNode.Size)}\nLast Modified: {fileNode.LastModified}";
 
             string? tempFilePath = null;
             try
@@ -54,30 +50,27 @@ namespace AWSS3Sync
                 var extension = Path.GetExtension(fileNode.Name).ToLowerInvariant();
                 if (new[] { ".txt", ".log", ".json", ".xml", ".cs", ".js", ".html", ".css" }.Contains(extension))
                 {
-                    if (previewTextBox != null)
-                    {
-                        previewTextBox.Text = File.ReadAllText(filePathToRead);
-                        previewTextBox.Visible = true;
-                    }
-                    if (previewInfoLabel != null) previewInfoLabel.Visible = false;
+                    previewTextBox.Text = File.ReadAllText(filePathToRead);
+                    previewTextBox.Visible = true;
+                    previewInfoLabel.Visible = false;
                 }
                 else if (new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif" }.Contains(extension))
                 {
                     using (var stream = new MemoryStream(File.ReadAllBytes(filePathToRead)))
                     {
-                        if (previewPictureBox != null) previewPictureBox.Image = Image.FromStream(stream);
+                        previewPictureBox.Image = Image.FromStream(stream);
                     }
-                    if (previewPictureBox != null) previewPictureBox.Visible = true;
-                    if (previewInfoLabel != null) previewInfoLabel.Visible = false;
+                    previewPictureBox.Visible = true;
+                    previewInfoLabel.Visible = false;
                 }
                 else
                 {
-                    if (previewInfoLabel != null) previewInfoLabel.Text += "\n\nPreview for this file type is not supported.";
+                    previewInfoLabel.Text += "\n\nPreview for this file type is not supported.";
                 }
             }
             catch (Exception ex)
             {
-                if (previewInfoLabel != null) previewInfoLabel.Text += $"\n\nError loading preview: {ex.Message}";
+                previewInfoLabel.Text += $"\n\nError loading preview: {ex.Message}";
             }
             finally
             {
@@ -262,9 +255,12 @@ namespace AWSS3Sync
 
                 foreach (var result in toUpload)
                 {
-                    var s3Key = Path.Combine(s3Dir.Path, result.RelativePath).Replace('\\', '/');
-                    var roles = new List<UserRole> { _currentUser.Role };
-                    await _s3Service.UploadFileAsync(result.LocalFile!.Path, s3Key, roles);
+                    if (result.LocalFile != null)
+                    {
+                        var s3Key = Path.Combine(s3Dir.Path, result.RelativePath).Replace('\\', '/');
+                        var roles = new List<UserRole> { _currentUser.Role };
+                        await _s3Service.UploadFileAsync(result.LocalFile.Path, s3Key, roles);
+                    }
                 }
                 MessageBox.Show("Delta upload complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -327,15 +323,18 @@ namespace AWSS3Sync
 
                 foreach (var result in toDownload)
                 {
-                    var localPath = Path.Combine(localDir.Path, result.RelativePath);
-                    var localDirForFile = Path.GetDirectoryName(localPath);
-                    if (localDirForFile != null)
+                    if (result.S3File != null)
                     {
-                        if (!Directory.Exists(localDirForFile))
+                        var localPath = Path.Combine(localDir.Path, result.RelativePath);
+                        var localDirForFile = Path.GetDirectoryName(localPath);
+                        if (localDirForFile != null)
                         {
-                            Directory.CreateDirectory(localDirForFile);
+                            if (!Directory.Exists(localDirForFile))
+                            {
+                                Directory.CreateDirectory(localDirForFile);
+                            }
+                            await _s3Service.DownloadFileAsync(result.S3File.Path, localDirForFile);
                         }
-                        await _s3Service.DownloadFileAsync(result.S3File!.Path, localDirForFile);
                     }
                 }
                 MessageBox.Show("Delta download complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);

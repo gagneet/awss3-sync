@@ -198,24 +198,42 @@ namespace AWSS3Sync
                 switch (result.Status)
                 {
                     case ComparisonStatus.LocalOnly:
-                        nodeToColor = FindNodeByPath(localTreeView.Nodes, result.LocalFile!.Path);
+                        if (result.LocalFile != null)
+                        {
+                            nodeToColor = FindNodeByPath(localTreeView.Nodes, result.LocalFile.Path);
+                        }
                         color = Color.Green;
                         break;
                     case ComparisonStatus.S3Only:
-                        nodeToColor = FindNodeByPath(s3TreeView.Nodes, result.S3File!.Path);
+                        if (result.S3File != null)
+                        {
+                            nodeToColor = FindNodeByPath(s3TreeView.Nodes, result.S3File.Path);
+                        }
                         color = Color.Red;
                         break;
                     case ComparisonStatus.Modified:
-                        var localNode = FindNodeByPath(localTreeView.Nodes, result.LocalFile!.Path);
-                        if (localNode != null) localNode.ForeColor = Color.Orange;
-                        var s3Node = FindNodeByPath(s3TreeView.Nodes, result.S3File!.Path);
-                        if (s3Node != null) s3Node.ForeColor = Color.Orange;
+                        if (result.LocalFile != null)
+                        {
+                            var localNode = FindNodeByPath(localTreeView.Nodes, result.LocalFile.Path);
+                            if (localNode != null) localNode.ForeColor = Color.Orange;
+                        }
+                        if (result.S3File != null)
+                        {
+                            var s3Node = FindNodeByPath(s3TreeView.Nodes, result.S3File.Path);
+                            if (s3Node != null) s3Node.ForeColor = Color.Orange;
+                        }
                         break;
                     case ComparisonStatus.Identical:
-                        var identicalLocalNode = FindNodeByPath(localTreeView.Nodes, result.LocalFile!.Path);
-                        if (identicalLocalNode != null) identicalLocalNode.ForeColor = Color.Gray;
-                        var identicalS3Node = FindNodeByPath(s3TreeView.Nodes, result.S3File!.Path);
-                        if (identicalS3Node != null) identicalS3Node.ForeColor = Color.Gray;
+                        if (result.LocalFile != null)
+                        {
+                            var identicalLocalNode = FindNodeByPath(localTreeView.Nodes, result.LocalFile.Path);
+                            if (identicalLocalNode != null) identicalLocalNode.ForeColor = Color.Gray;
+                        }
+                        if (result.S3File != null)
+                        {
+                            var identicalS3Node = FindNodeByPath(s3TreeView.Nodes, result.S3File.Path);
+                            if (identicalS3Node != null) identicalS3Node.ForeColor = Color.Gray;
+                        }
                         break;
                 }
 
