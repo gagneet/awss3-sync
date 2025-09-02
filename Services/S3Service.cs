@@ -354,8 +354,7 @@ namespace AWSS3Sync.Services
                         version.Key,
                         version.Key,
                         false,
-                        version.Size,
-                        version.LastModified,
+                        version.LastModified ?? DateTime.UtcNow,
                         version.VersionId
                     ));
                 }

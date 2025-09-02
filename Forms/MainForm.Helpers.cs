@@ -186,7 +186,6 @@ namespace AWSS3Sync
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
             if (s3TreeView == null) return;
 
-            _isUpdatingTree = true;
             s3TreeView.BeginUpdate();
 
             try
@@ -208,7 +207,6 @@ namespace AWSS3Sync
             finally
             {
                 s3TreeView.EndUpdate();
-                _isUpdatingTree = false;
             }
         }
 
