@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using S3FileManager.Models;
-using S3FileManager.Services;
 
 namespace S3FileManager
 {
