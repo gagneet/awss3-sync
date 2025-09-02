@@ -60,8 +60,7 @@ namespace S3FileManager.Services
                 {
                     RegionEndpoint = RegionEndpoint.GetBySystemName(config.AWS.Region),
                     MaxErrorRetry = 3,
-                    Timeout = TimeSpan.FromMinutes(5),
-                    ReadWriteTimeout = TimeSpan.FromMinutes(5)
+                    Timeout = TimeSpan.FromMinutes(5)
                 };
                 
                 _s3Client = new AmazonS3Client(
@@ -72,7 +71,7 @@ namespace S3FileManager.Services
             }
             
             _bucketName = config.AWS.BucketName;
-            _metadataService = new MetadataService();
+            _metadataService = new MetadataService(_s3Client, _bucketName);
             
             // Initialize transfer utility for optimized transfers
             var transferConfig = new TransferUtilityConfig

@@ -129,7 +129,7 @@ namespace S3FileManager.Services
                     var item = new S3FileItem
                     {
                         Key = obj.Key,
-                        Size = obj.Size ?? 0,
+                        Size = obj.Size ?? 0L,
                         LastModified = obj.LastModified ?? DateTime.MinValue,
                         AccessRoles = accessRoles
                     };
@@ -139,7 +139,7 @@ namespace S3FileManager.Services
                     }
                 }
                 request.ContinuationToken = response.NextContinuationToken;
-            } while (response.IsTruncated.GetValueOrDefault());
+            } while (response.IsTruncated.GetValueOrDefault(false));
             files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
             return FilterFilesForRole(files, userRole);
         }
@@ -207,7 +207,7 @@ namespace S3FileManager.Services
             public long Size { get; set; }
         }
 
-        private async Task<S3ObjectAttributes> GetS3ObjectAttributesAsync(string key)
+        private async Task<S3ObjectAttributes?> GetS3ObjectAttributesAsync(string key)
         {
             try
             {
@@ -215,7 +215,7 @@ namespace S3FileManager.Services
                 var metadata = await _s3Client.GetObjectMetadataAsync(request);
                 return new S3ObjectAttributes
                 {
-                    LastModified = metadata.LastModified?.ToUniversalTime() ?? DateTime.UtcNow,
+                    LastModified = metadata.LastModified.ToUniversalTime(),
                     Size = metadata.ContentLength
                 };
             }

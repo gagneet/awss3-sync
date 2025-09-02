@@ -799,6 +799,11 @@ namespace S3FileManager.Forms
             }
         }
         
+        private async void RefreshButton_Click(object? sender, EventArgs e)
+        {
+            await RefreshS3Files();
+        }
+        
         private void UpdateStatus(string message)
         {
             if (InvokeRequired)
