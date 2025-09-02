@@ -12,6 +12,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
 using S3FileManager.Models;
+using CognitoUserModel = S3FileManager.Models.CognitoUser;
 
 namespace S3FileManager.Services
 {
@@ -28,10 +29,10 @@ namespace S3FileManager.Services
         private readonly SemaphoreSlim _uploadSemaphore;
         private readonly SemaphoreSlim _downloadSemaphore;
         private readonly ConcurrentDictionary<string, S3ObjectMetadata> _metadataCache;
-        private readonly Timer _cacheCleanupTimer;
+        private readonly System.Threading.Timer _cacheCleanupTimer;
         private readonly bool _hasValidCredentials;
         
-        public OptimizedS3Service(CognitoUser? cognitoUser = null, UnifiedUser? unifiedUser = null)
+        public OptimizedS3Service(CognitoUserModel? cognitoUser = null, UnifiedUser? unifiedUser = null)
         {
             var config = ConfigurationService.GetConfiguration();
             _performanceConfig = config.Performance;
@@ -89,7 +90,7 @@ namespace S3FileManager.Services
             _metadataCache = new ConcurrentDictionary<string, S3ObjectMetadata>();
             
             // Setup cache cleanup timer
-            _cacheCleanupTimer = new Timer(
+            _cacheCleanupTimer = new System.Threading.Timer(
                 CleanupCache, 
                 null, 
                 TimeSpan.FromMinutes(_performanceConfig.MetadataCacheDurationMinutes),

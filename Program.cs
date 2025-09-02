@@ -2,6 +2,7 @@ using System;
 using System.Windows.Forms;
 using S3FileManager.Forms;
 using S3FileManager.Models;
+using CognitoUserModel = S3FileManager.Models.CognitoUser;
 
 namespace S3FileManager
 {
@@ -83,9 +84,9 @@ namespace S3FileManager
         /// <summary>
         /// Convert UnifiedUser to CognitoUser for compatibility with OptimizedMainForm
         /// </summary>
-        private static CognitoUser UnifiedUserToCognitoUser(UnifiedUser user)
+        private static CognitoUserModel UnifiedUserToCognitoUser(UnifiedUser user)
         {
-            return new CognitoUser
+            return new CognitoUserModel
             {
                 Username = user.Username,
                 Email = user.Email,

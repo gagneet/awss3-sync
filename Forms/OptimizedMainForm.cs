@@ -8,12 +8,13 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using S3FileManager.Models;
 using S3FileManager.Services;
+using CognitoUserModel = S3FileManager.Models.CognitoUser;
 
 namespace S3FileManager.Forms
 {
     public partial class OptimizedMainForm : Form
     {
-        private readonly CognitoUser _currentUser;
+        private readonly CognitoUserModel _currentUser;
         private readonly OptimizedS3Service _s3Service;
         private readonly CognitoAuthService _authService;
         private readonly FileService _fileService;
@@ -36,7 +37,7 @@ namespace S3FileManager.Forms
         private CancellationTokenSource? _currentOperation;
         private System.Windows.Forms.Timer? _tokenRefreshTimer;
         
-        public OptimizedMainForm(CognitoUser user)
+        public OptimizedMainForm(CognitoUserModel user)
         {
             _currentUser = user;
             _s3Service = new OptimizedS3Service(user);

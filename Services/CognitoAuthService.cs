@@ -14,6 +14,8 @@ using Amazon.Extensions.CognitoAuthentication;
 using Amazon.Runtime;
 using Newtonsoft.Json;
 using S3FileManager.Models;
+using CognitoUserModel = S3FileManager.Models.CognitoUser;
+using AmazonCognitoUser = Amazon.Extensions.CognitoAuthentication.CognitoUser;
 
 namespace S3FileManager.Services
 {
@@ -26,7 +28,7 @@ namespace S3FileManager.Services
         private readonly AmazonCognitoIdentityProviderClient _cognitoClient;
         private readonly string _cacheFilePath;
         private CognitoUserPool? _userPool;
-        private CognitoUser? _currentUser;
+        private CognitoUserModel? _currentUser;
 
         public CognitoAuthService()
         {
@@ -72,7 +74,7 @@ namespace S3FileManager.Services
         /// <summary>
         /// Authenticate user with Cognito or use cached credentials for offline access
         /// </summary>
-        public async Task<CognitoUser?> AuthenticateAsync(string username, string password, bool forceOnline = false)
+        public async Task<CognitoUserModel?> AuthenticateAsync(string username, string password, bool forceOnline = false)
         {
             try
             {
@@ -109,13 +111,13 @@ namespace S3FileManager.Services
                     var userDetails = await GetUserDetailsAsync(authResponse.AuthenticationResult.AccessToken);
                     var groups = await GetUserGroupsAsync(username, authResponse.AuthenticationResult.AccessToken);
                     
-                    _currentUser = new CognitoUser
+                    _currentUser = new CognitoUserModel
                     {
                         Username = username,
                         Email = userDetails.GetValueOrDefault("email", ""),
                         Sub = userDetails.GetValueOrDefault("sub", ""),
                         Groups = groups,
-                        Role = CognitoUser.MapGroupsToRole(groups),
+                        Role = CognitoUserModel.MapGroupsToRole(groups),
                         LastLogin = DateTime.UtcNow,
                         TokenExpiry = DateTime.UtcNow.AddSeconds(authResponse.AuthenticationResult.ExpiresIn),
                         AccessToken = authResponse.AuthenticationResult.AccessToken,
@@ -159,7 +161,7 @@ namespace S3FileManager.Services
         /// <summary>
         /// Authenticate using cached credentials for offline access
         /// </summary>
-        private async Task<CognitoUser?> AuthenticateOfflineAsync(string username, string password)
+        private async Task<CognitoUserModel?> AuthenticateOfflineAsync(string username, string password)
         {
             try
             {
@@ -183,7 +185,7 @@ namespace S3FileManager.Services
                     return null;
                 }
                 
-                _currentUser = new CognitoUser
+                _currentUser = new CognitoUserModel
                 {
                     Username = username,
                     Role = cachedCredentials.CachedRole,
@@ -253,7 +255,7 @@ namespace S3FileManager.Services
         /// <summary>
         /// Get temporary AWS credentials using Cognito Identity
         /// </summary>
-        private async Task GetAwsCredentialsAsync(CognitoUser user)
+        private async Task GetAwsCredentialsAsync(CognitoUserModel user)
         {
             if (string.IsNullOrEmpty(_config.IdentityPoolId) || string.IsNullOrEmpty(user.IdToken))
             {
@@ -350,7 +352,7 @@ namespace S3FileManager.Services
         /// <summary>
         /// Cache credentials for offline use
         /// </summary>
-        private async Task CacheCredentialsAsync(CognitoUser user, string password)
+        private async Task CacheCredentialsAsync(CognitoUserModel user, string password)
         {
             try
             {
@@ -525,7 +527,7 @@ namespace S3FileManager.Services
         /// <summary>
         /// Get current authenticated user
         /// </summary>
-        public CognitoUser? GetCurrentUser()
+        public CognitoUserModel? GetCurrentUser()
         {
             return _currentUser;
         }

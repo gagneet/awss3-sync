@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CognitoUserModel = S3FileManager.Models.CognitoUser;
 
 namespace S3FileManager.Models
 {
@@ -59,7 +60,7 @@ namespace S3FileManager.Models
         /// <summary>
         /// Create UnifiedUser from CognitoUser
         /// </summary>
-        public static UnifiedUser FromCognitoUser(CognitoUser cognitoUser)
+        public static UnifiedUser FromCognitoUser(CognitoUserModel cognitoUser)
         {
             return new UnifiedUser
             {
