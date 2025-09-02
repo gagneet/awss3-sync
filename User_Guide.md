@@ -58,76 +58,13 @@ Double-click `AWSS3Sync.exe`. The login window appears.
 
 ## 5. Logging In
 
-The application uses a **Unified Authentication System** that provides secure, intelligent login with automatic method detection.
+Select your user role and enter credentials.
 
-### Authentication Methods
+**Roles:**
 
-**Automatic (Recommended):** The system automatically tries AWS Cognito first, then falls back to local authentication if needed.
-
-**AWS Cognito Authentication:**
-- Full AWS integration with proper S3 permissions
-- Role-based access via AWS IAM groups
-- Offline mode support with cached credentials
-- Secure temporary credentials for S3 operations
-
-**Local Authentication:**
-- Simple username-based authentication for backward compatibility
-- Limited S3 access (operations may fail without AWS credentials)
-- Manual role selection
-- Should be used only when Cognito is unavailable
-
-### Login Process
-
-1. **Launch the application** - The Unified Login Form appears
-2. **Select authentication method** (Automatic recommended)
-3. **Enter your credentials:**
-   - Username or email address
-   - Password
-4. **Optional settings:**
-   - Check "Try offline mode first" if you have cached Cognito credentials
-5. **Click Login**
-
-### Security Warnings
-
-- **Limited Access Warning:** If you authenticate locally without AWS credentials, you'll see a warning about limited S3 access
-- **Offline Mode Notice:** When using cached credentials, some features may be limited
-- **Credential Validation:** The system validates AWS credentials before allowing S3 operations
-
-### User Roles
-
-**Administrator:** 
-- Full S3 bucket access (read/write/delete)
-- All administrative functions
-- AWS Cognito group: `strata-admin` or `Administrator`
-
-**Executive:** 
-- Upload and download access
-- Limited administrative functions  
-- AWS Cognito group: `strata-ec`, `Executive`, or `ExecutiveCommittee`
-
-**User (Resident):** 
-- View and download access for public folders
-- AWS Cognito group: Default for all users
-
-### Troubleshooting Login Issues
-
-**"No AWS credentials available" error:**
-- Contact your administrator to set up AWS Cognito authentication
-- Verify your internet connection for Cognito access
-
-**"Authentication failed" error:**
-- Check your username and password
-- Try different authentication methods
-- Ensure AWS Cognito service is available
-
-**"Limited access mode" warning:**
-- You're authenticated locally but don't have AWS credentials
-- Contact your administrator for full AWS Cognito access
-- Some S3 operations may fail
-
-### Getting Help
-
-Click **"Need help?"** on the login form for detailed troubleshooting guidance and authentication method explanations.
+- **Administrator:** Full access
+- **Executive:** Limited upload/download
+- **User:** View-only
 
 ---
 

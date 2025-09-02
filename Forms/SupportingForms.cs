@@ -981,7 +981,8 @@ namespace S3FileManager
                 var s3Items = selectedFiles.Select(key => new S3FileItem
                 {
                     Key = key,
-                    AccessRoles = new List<UserRole> { UserRole.Administrator }
+                    AccessRoles = new List<UserRole> { UserRole.Administrator },
+                    IsDirectory = key.EndsWith("/")
                 }).ToList();
 
                 // Show permission management form
@@ -997,23 +998,16 @@ namespace S3FileManager
                     using var s3Client = new Amazon.S3.AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
                     var metadataService = new MetadataService(s3Client, config.AWS.BucketName);
 
-                    using var progressForm = new ProgressForm("Updating permissions...");
+                    var progressForm = new ProgressForm("Updating permissions...");
                     progressForm.Show();
                     
-                    try
+                    foreach (var fileKey in selectedFiles)
                     {
-                        foreach (var fileKey in selectedFiles)
-                        {
-                            progressForm.UpdateMessage($"Setting permissions for: {fileKey}");
-                            await metadataService.SetFileAccessRolesAsync(fileKey, permissionForm.SelectedRoles);
-                        }
+                        progressForm.UpdateMessage($"Setting permissions for: {fileKey}");
+                        await metadataService.SetFileAccessRolesAsync(fileKey, permissionForm.SelectedRoles);
                     }
-                    catch
-                    {
-                        // Re-throw to be handled by outer catch block
-                        // The using statement will ensure progressForm is disposed
-                        throw;
-                    }
+                    
+                    progressForm.Close();
 
                     MessageBox.Show($"Successfully updated permissions for {selectedFiles.Count} file(s).",
                         "Permissions Updated", MessageBoxButtons.OK, MessageBoxIcon.Information);

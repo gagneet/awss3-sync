@@ -1,47 +1,23 @@
 # AWS S3 Sync Utility
 
-A comprehensive Windows desktop application for managing AWS S3 bucket files with **unified authentication**, role-based access control, hierarchical file navigation, and advanced permission management.
+A comprehensive Windows desktop application for managing AWS S3 bucket files with role-based access control, hierarchical file navigation, and advanced permission management.
 
-![Application Screenshot](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-8.0-purple) ![AWS](https://img.shields.io/badge/AWS-S3-orange) ![Security](https://img.shields.io/badge/Security-Enhanced-green)
-
-## 🆕 What's New in v2.0
-
-### 🔐 **Unified Authentication System**
-- **Single Login Interface**: Intelligent authentication with automatic method detection
-- **Enhanced Security**: Proper AWS credential validation prevents S3 operation failures
-- **Automatic Fallback**: Seamlessly switches from Cognito to local authentication when needed
-- **Security Warnings**: Clear guidance when users have limited access
-- **Improved UX**: Progressive disclosure and comprehensive help system
-
-### 🛡️ **Critical Security Fixes**
-- **Credential Validation**: All S3 operations now validate AWS credentials before execution
-- **Access Warnings**: Users without AWS credentials receive prominent warnings
-- **Secure Architecture**: Local users can no longer bypass AWS IAM security controls
-- **Error Prevention**: Prevents runtime S3 failures due to missing credentials
+![Application Screenshot](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-8.0-purple) ![AWS](https://img.shields.io/badge/AWS-S3-orange)
 
 ## 📚 Documentation
 
-- [**Unified Authentication Guide**](UNIFIED_AUTHENTICATION_GUIDE.md): **NEW** - Complete documentation of the unified authentication system
-- [User Guide](User_Guide.md): Step-by-step instructions for installation, configuration, and daily use
-- [AWS IAM Setup Guide](AWS_IAM_SETUP_GUIDE.md): **UPDATED** - Enhanced with migration guidance and security improvements
-- [Developer Guide](Developer_Guide.md): Architecture overview, coding standards, contribution workflow, and known gaps/TODOs
-- [Sync Feature Test Plan](SyncFeatureTestPlan.md): Checklist and template for validating the sync functionality
+- [User Guide](USER_GUIDE.md): Step-by-step instructions for installation, configuration, and daily use.
+- [Developer Guide](DEVELOPER_GUIDE.md): Architecture overview, coding standards, contribution workflow, and known gaps/TODOs.
+- [Sync Feature Test Plan](SyncFeatureTestPlan.md): Checklist and template for validating the sync functionality.
 
-> **Migration Guide**: Existing users can continue using local authentication, but AWS Cognito is recommended for full functionality and security.
+> For full sync limitations, developer onboarding, and usage walkthroughs, please consult the above guides.
 
 ## 🌟 Features
 
-### 🔐 **Enhanced Authentication & Security**
-- **Unified Authentication**: Single login form with automatic Cognito/Local detection
-- **AWS Cognito Integration**: Full IAM integration with role-based permissions
-- **Offline Support**: Cached credentials for offline access
-- **Security Validation**: All S3 operations validate credentials before execution
-- **Clear Warnings**: Users understand their access level and limitations
-
-### 🎭 **Role-Based Access Control**
-- **Administrator**: Full access to all files, upload/download/delete capabilities, permission management
-- **Executive**: Can download files, upload to specific folders, access executive-only content
-- **User**: View-only access to specifically assigned files and folders
+### 🔐 Role-Based Access Control
+- **Administrator**: Full access to all files, upload/download/delete capabilities, permission management.
+- **Executive**: Can download files, upload to specific folders, access executive-only content.
+- **User**: View-only access to specifically assigned files and folders.
 
 ### 🌲 Explorer-Like Interface
 - **Hierarchical Tree View**: Navigate local and S3 files and folders in a familiar parent-child structure.

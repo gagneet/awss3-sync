@@ -30,6 +30,7 @@ namespace S3FileManager.Models
         public long Size { get; set; }
         public DateTime LastModified { get; set; }
         public List<UserRole> AccessRoles { get; set; } = new List<UserRole>();
+        public string VersionId { get; set; }
         public List<FileNode> Children { get; set; } = new List<FileNode>();
         public bool IsS3 { get; set; }
 
@@ -53,6 +54,18 @@ namespace S3FileManager.Models
             Size = size;
             LastModified = lastModified;
             AccessRoles = accessRoles;
+            IsS3 = true;
+        }
+
+        // Constructor for S3 file versions
+        public FileNode(string name, string path, long size, DateTime lastModified, string versionId)
+        {
+            Name = name;
+            Path = path;
+            IsDirectory = false;
+            Size = size;
+            LastModified = lastModified;
+            VersionId = versionId;
             IsS3 = true;
         }
     }
