@@ -129,7 +129,7 @@ namespace S3FileManager.Services
                     var item = new S3FileItem
                     {
                         Key = obj.Key,
-                        Size = obj.Size ?? 0,
+                        Size = obj.Size ?? 0L,
                         LastModified = obj.LastModified ?? DateTime.MinValue,
                         AccessRoles = accessRoles
                     };
@@ -139,7 +139,7 @@ namespace S3FileManager.Services
                     }
                 }
                 request.ContinuationToken = response.NextContinuationToken;
-            } while (response.IsTruncated.GetValueOrDefault());
+            } while (response.IsTruncated.GetValueOrDefault(false));
             files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
             return FilterFilesForRole(files, userRole);
         }

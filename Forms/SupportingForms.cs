@@ -981,8 +981,7 @@ namespace S3FileManager
                 var s3Items = selectedFiles.Select(key => new S3FileItem
                 {
                     Key = key,
-                    AccessRoles = new List<UserRole> { UserRole.Administrator },
-                    IsDirectory = key.EndsWith("/")
+                    AccessRoles = new List<UserRole> { UserRole.Administrator }
                 }).ToList();
 
                 // Show permission management form

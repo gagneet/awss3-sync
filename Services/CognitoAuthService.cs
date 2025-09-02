@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Amazon;
 using Amazon.CognitoIdentity;
+using Amazon.CognitoIdentity.Model;
 using Amazon.CognitoIdentityProvider;
 using Amazon.CognitoIdentityProvider.Model;
 using Amazon.Extensions.CognitoAuthentication;
