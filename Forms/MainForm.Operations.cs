@@ -13,10 +13,10 @@ namespace AWSS3Sync
     {
         // --- S3 Loading and Population ---
 
-        private async Task LoadS3FilesAsync()
+        private Task LoadS3FilesAsync()
         {
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
-            if (s3TreeView == null) return;
+            if (s3TreeView == null) return Task.CompletedTask;
 
             s3TreeView.Nodes.Clear();
             _s3CheckedItems.Clear();
@@ -30,6 +30,7 @@ namespace AWSS3Sync
             // Add placeholder for lazy loading
             rootNode.Nodes.Add(new TreeNode("Loading..."));
             rootNode.Expand(); // Expand the root to trigger the initial load
+            return Task.CompletedTask;
         }
 
         private async Task LoadS3DirectoryNodesAsync(TreeNode parentNode)

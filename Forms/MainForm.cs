@@ -26,7 +26,6 @@ namespace AWSS3Sync
         // Performance optimization: Cache and selection tracking
         private readonly Dictionary<string, bool> _s3CheckedItems = new Dictionary<string, bool>();
         private readonly Dictionary<string, bool> _localCheckedItems = new Dictionary<string, bool>();
-        private bool _isUpdatingTree = false;
 
         public MainForm(User currentUser)
         {

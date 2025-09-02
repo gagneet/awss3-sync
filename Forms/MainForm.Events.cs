@@ -11,7 +11,7 @@ namespace AWSS3Sync
 {
     public partial class MainForm
     {
-        private async void TreeView_AfterSelect(object sender, TreeViewEventArgs e)
+        private async void TreeView_AfterSelect(object? sender, TreeViewEventArgs e)
         {
             var fileNode = e.Node?.Tag as FileNode;
             if (fileNode == null) return;
@@ -84,7 +84,7 @@ namespace AWSS3Sync
                 }
             }
         }
-        private void LocalTreeView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
+        private void LocalTreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
         {
             if (e.Node.Nodes.Count > 0 && e.Node.Nodes[0].Text == "Loading...")
             {
@@ -96,7 +96,7 @@ namespace AWSS3Sync
             }
         }
 
-        private void S3TreeView_MouseUp(object sender, MouseEventArgs e)
+        private void S3TreeView_MouseUp(object? sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Right)
             {
@@ -109,7 +109,7 @@ namespace AWSS3Sync
             }
         }
 
-        private void S3ContextMenu_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        private void S3ContextMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             var menu = sender as ContextMenuStrip;
             var treeView = menu.SourceControl as TreeView;
@@ -128,7 +128,7 @@ namespace AWSS3Sync
             }
         }
 
-        private async void ViewVersionsMenuItem_Click(object sender, EventArgs e)
+        private async void ViewVersionsMenuItem_Click(object? sender, EventArgs e)
         {
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
             var selectedNode = s3TreeView?.SelectedNode;
@@ -147,8 +147,9 @@ namespace AWSS3Sync
                     return;
                 }
 
-                // Need to use the fully qualified name to avoid conflict with the namespace
-                using (var versionForm = new S3FileManager.Forms.VersionHistoryForm(fileNode.Path, versions, _s3Service, _fileService))
+                // The namespace of this form is AWSS3Sync, and VersionHistoryForm is in AWSS3Sync.Forms.
+                // We can access it via Forms.VersionHistoryForm.
+                using (var versionForm = new Forms.VersionHistoryForm(fileNode.Path, versions, _s3Service, _fileService))
                 {
                     versionForm.ShowDialog();
                 }
@@ -159,7 +160,7 @@ namespace AWSS3Sync
             }
         }
 
-        private async void S3TreeView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
+        private async void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
         {
             if (e.Node.Nodes.Count > 0 && e.Node.Nodes[0].Text == "Loading...")
             {
@@ -167,7 +168,7 @@ namespace AWSS3Sync
             }
         }
 
-        private void TreeView_AfterCheck(object sender, TreeViewEventArgs e)
+        private void TreeView_AfterCheck(object? sender, TreeViewEventArgs e)
         {
             if (e.Node?.Tag is FileNode fileNode)
             {
@@ -211,7 +212,7 @@ namespace AWSS3Sync
 
         #region Button Event Handlers
 
-        private void BrowseButton_Click(object sender, EventArgs e)
+        private void BrowseButton_Click(object? sender, EventArgs e)
         {
             using (var folderDialog = new FolderBrowserDialog())
             {
@@ -228,7 +229,7 @@ namespace AWSS3Sync
             }
         }
 
-        private async void UploadButton_Click(object sender, EventArgs e)
+        private async void UploadButton_Click(object? sender, EventArgs e)
         {
             // If a comparison has been run, perform a delta upload
             if (_comparisonResults.Any())
@@ -287,7 +288,7 @@ namespace AWSS3Sync
             }
         }
 
-        private async void DownloadButton_Click(object sender, EventArgs e)
+        private async void DownloadButton_Click(object? sender, EventArgs e)
         {
             // If a comparison has been run, perform a delta download
             if (_comparisonResults.Any())
@@ -352,7 +353,7 @@ namespace AWSS3Sync
             }
         }
 
-        private async void DeleteButton_Click(object sender, EventArgs e)
+        private async void DeleteButton_Click(object? sender, EventArgs e)
         {
             var selectedItems = GetCheckedS3Items();
             if (selectedItems.Count == 0)
@@ -379,7 +380,7 @@ namespace AWSS3Sync
             }
         }
 
-        private async void SyncButton_Click(object sender, EventArgs e)
+        private void SyncButton_Click(object? sender, EventArgs e)
         {
             if (_currentUser.Role != UserRole.Administrator)
             {
@@ -411,25 +412,25 @@ namespace AWSS3Sync
             MessageBox.Show("Sync functionality is not fully implemented due to missing UI components (SyncDirectionForm).", "Not Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private async void RefreshS3Button_Click(object sender, EventArgs e)
+        private async void RefreshS3Button_Click(object? sender, EventArgs e)
         {
             // Reload the entire S3 tree from the root
             await LoadS3FilesAsync();
         }
 
-        private void ManagePermissionsButton_Click(object sender, EventArgs e)
+        private void ManagePermissionsButton_Click(object? sender, EventArgs e)
         {
             // Placeholder stub for permissions management functionality
             MessageBox.Show("Permissions management functionality not yet implemented.", "Not Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private void SearchTextBox_TextChanged(object sender, EventArgs e)
+        private void SearchTextBox_TextChanged(object? sender, EventArgs e)
         {
             // Placeholder stub for search functionality
             // This would typically filter the S3 TreeView based on the search text
         }
 
-        private void ClearSearchButton_Click(object sender, EventArgs e)
+        private void ClearSearchButton_Click(object? sender, EventArgs e)
         {
             // Placeholder stub for clearing search
             var searchTextBox = this.Controls.Find("searchTextBox", true).FirstOrDefault() as TextBox;
@@ -439,7 +440,7 @@ namespace AWSS3Sync
             }
         }
 
-        private async void CompareButton_Click(object sender, EventArgs e)
+        private async void CompareButton_Click(object? sender, EventArgs e)
         {
             var localTreeView = this.Controls.Find("localTreeView", true).FirstOrDefault() as TreeView;
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
@@ -474,7 +475,7 @@ namespace AWSS3Sync
             }
         }
 
-        private void ReviewPermissionsButton_Click(object sender, EventArgs e)
+        private void ReviewPermissionsButton_Click(object? sender, EventArgs e)
         {
             if (_currentUser.Role != UserRole.Administrator)
             {
