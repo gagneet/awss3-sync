@@ -82,7 +82,7 @@ namespace AWSS3Sync
         }
         private void LocalTreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
         {
-            if (e.Node.Nodes.Count > 0 && e.Node.Nodes[0].Text == "Loading...")
+            if (e.Node != null && e.Node.Nodes.Count > 0 && e.Node.Nodes[0].Text == "Loading...")
             {
                 e.Node.Nodes.Clear();
                 if (e.Node.Tag is FileNode fileNode)
@@ -161,7 +161,7 @@ namespace AWSS3Sync
 
         private async void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
         {
-            if (e.Node.Nodes.Count > 0 && e.Node.Nodes[0].Text == "Loading...")
+            if (e.Node != null && e.Node.Nodes.Count > 0 && e.Node.Nodes[0].Text == "Loading...")
             {
                 await LoadS3DirectoryNodesAsync(e.Node);
             }
