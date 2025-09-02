@@ -207,7 +207,7 @@ namespace S3FileManager.Services
             public long Size { get; set; }
         }
 
-        private async Task<S3ObjectAttributes> GetS3ObjectAttributesAsync(string key)
+        private async Task<S3ObjectAttributes?> GetS3ObjectAttributesAsync(string key)
         {
             try
             {
@@ -215,7 +215,7 @@ namespace S3FileManager.Services
                 var metadata = await _s3Client.GetObjectMetadataAsync(request);
                 return new S3ObjectAttributes
                 {
-                    LastModified = metadata.LastModified?.ToUniversalTime() ?? DateTime.UtcNow,
+                    LastModified = metadata.LastModified.ToUniversalTime(),
                     Size = metadata.ContentLength
                 };
             }
