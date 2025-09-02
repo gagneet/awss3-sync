@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -30,19 +31,6 @@ namespace S3FileManager.Services
         public CognitoAuthService()
         {
             var appConfig = ConfigurationService.GetConfiguration();
-            _config = appConfig.Cognito;
-            
-            // Initialize Cognito client
-            var cognitoConfig = new AmazonCognitoIdentityProviderConfig
-            {
-                RegionEndpoint = RegionEndpoint.GetBySystemName(_config.Region)
-            };
-            
-            _cognitoClient = new AmazonCognitoIdentityProviderClient(
-                new AnonymousAWSCredentials(), 
-public CognitoAuthService()
-        {
-            var appConfig = ConfigurationService.GetConfiguration();
             if (appConfig?.Cognito == null)
             {
                 throw new InvalidOperationException("Cognito configuration is missing or invalid.");
@@ -70,9 +58,6 @@ public CognitoAuthService()
             {
                 throw new InvalidOperationException("Failed to initialize AWS Cognito client.", ex);
             }
-            
-            // Setup cache file path
-            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             
             // Setup cache file path
             string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -462,24 +447,8 @@ public CognitoAuthService()
         }
 
         /// <summary>
-        /// Encrypt data using Windows DPAPI
-        /// </summary>
-        private string EncryptData(string data)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(data);
-            byte[] encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
-            return Convert.ToBase64String(encrypted);
-        }
-
         /// <summary>
-        /// Decrypt data using Windows DPAPI
-        /// </summary>
-        private string DecryptData(string encryptedData)
-        {
-            byte[] encrypted = Convert.FromBase64String(encryptedData);
-            byte[] decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
-            return Encoding.UTF8.GetString(decrypted);
-/// Encrypt data using Windows DPAPI
+        /// Encrypt data using Windows DPAPI
         /// </summary>
         private string EncryptData(string data)
         {
@@ -527,9 +496,6 @@ public CognitoAuthService()
                 return string.Empty;
             }
         }
-
-        /// <summary>
-        /// Sign out current user
 
         /// <summary>
         /// Sign out current user
