@@ -4,9 +4,10 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
+using AWSS3Sync.Services;
 
-namespace S3FileManager
+namespace AWSS3Sync
 {
     public partial class MainForm
     {

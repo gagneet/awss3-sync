@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
 
-namespace S3FileManager.Services
+namespace AWSS3Sync.Services
 {
     public class S3Service : IDisposable
     {
@@ -353,14 +353,15 @@ namespace S3FileManager.Services
                     versions.Add(new FileNode(
                         version.Key,
                         version.Key,
+                        false,
                         version.Size,
                         version.LastModified,
                         version.VersionId
                     ));
                 }
-                request.NextKeyMarker = response.NextKeyMarker;
-                request.NextVersionIdMarker = response.NextVersionIdMarker;
-            } while (response.IsTruncated);
+                request.KeyMarker = response.NextKeyMarker;
+                request.VersionIdMarker = response.NextVersionIdMarker;
+            } while (response.IsTruncated == true);
 
             return versions;
         }

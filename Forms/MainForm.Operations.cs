@@ -5,9 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
 
-namespace S3FileManager
+namespace AWSS3Sync
 {
     public partial class MainForm
     {
@@ -39,7 +39,7 @@ namespace S3FileManager
             try
             {
                 // Fetch direct descendants
-                var files = await _s3Service.ListFilesAsync(parentNodeInfo.Path, _currentUser.Role);
+                var files = await _s3Service.ListFilesAsync(_currentUser.Role, parentNodeInfo.Path);
 
                 this.Invoke(new Action(() =>
                 {

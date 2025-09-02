@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Amazon;
 using Amazon.S3;
-using S3FileManager.Models;
-using S3FileManager.Services;
+using AWSS3Sync.Models;
+using AWSS3Sync.Services;
 
-namespace S3FileManager
+namespace AWSS3Sync
 {
     // Sync Direction Selection
     public enum SyncDirection
@@ -981,8 +981,7 @@ namespace S3FileManager
                 var s3Items = selectedFiles.Select(key => new S3FileItem
                 {
                     Key = key,
-                    AccessRoles = new List<UserRole> { UserRole.Administrator },
-                    IsDirectory = key.EndsWith("/")
+                    AccessRoles = new List<UserRole> { UserRole.Administrator }
                 }).ToList();
 
                 // Show permission management form

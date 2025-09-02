@@ -6,10 +6,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using S3FileManager.Models;
-using S3FileManager.Services;
+using AWSS3Sync.Models;
+using AWSS3Sync.Services;
 
-namespace S3FileManager
+namespace AWSS3Sync
 {
     public partial class MainForm : Form
     {

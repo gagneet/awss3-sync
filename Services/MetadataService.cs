@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Amazon.S3;
 using Amazon.S3.Model;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
 
-namespace S3FileManager.Services
+namespace AWSS3Sync.Services
 {
     public class MetadataService
     {
