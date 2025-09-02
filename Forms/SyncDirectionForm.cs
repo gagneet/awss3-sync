@@ -2,7 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace S3FileManager.Forms
+namespace AWSS3Sync.Forms
 {
     public enum SyncDirection
     {

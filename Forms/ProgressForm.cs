@@ -1,7 +1,7 @@
 ﻿using System.Drawing;
 using System.Windows.Forms;
 
-namespace S3FileManager
+namespace AWSS3Sync
 {
     public class ProgressForm : Form
     {

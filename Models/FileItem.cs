@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace S3FileManager.Models
+namespace AWSS3Sync.Models
 {
     public class LocalFileItem
     {
@@ -63,6 +63,18 @@ namespace S3FileManager.Models
             Name = name;
             Path = path;
             IsDirectory = false;
+            Size = size;
+            LastModified = lastModified;
+            VersionId = versionId;
+            IsS3 = true;
+        }
+
+        // Overloaded constructor to resolve ambiguity
+        public FileNode(string name, string path, bool isDirectory, long size, DateTime lastModified, string versionId)
+        {
+            Name = name;
+            Path = path;
+            IsDirectory = isDirectory;
             Size = size;
             LastModified = lastModified;
             VersionId = versionId;

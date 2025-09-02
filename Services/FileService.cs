@@ -1,8 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.IO;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
 
-namespace S3FileManager.Services
+namespace AWSS3Sync.Services
 {
     public class FileService
     {

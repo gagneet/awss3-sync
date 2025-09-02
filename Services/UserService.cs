@@ -6,9 +6,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
 using Newtonsoft.Json;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
 
-namespace S3FileManager.Services
+namespace AWSS3Sync.Services
 {
     public class UserService
     {

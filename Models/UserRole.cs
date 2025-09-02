@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace S3FileManager.Models
+namespace AWSS3Sync.Models
 {
     public enum UserRole
     {
