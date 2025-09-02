@@ -355,14 +355,16 @@ namespace AWSS3Sync.Services
                 {
                     if (version.Key != key) continue;
 
-                    versions.Add(new FileNode(
+                    var node = new FileNode(
                         version.Key,
                         version.Key,
                         false,
-                        version.Size,
+                        version.Size ?? 0,
                         version.LastModified ?? DateTime.UtcNow,
-                        version.VersionId
-                    ));
+                        new List<UserRole>()
+                    );
+                    node.VersionId = version.VersionId;
+                    versions.Add(node);
                 }
                 request.KeyMarker = response.NextKeyMarker;
                 request.VersionIdMarker = response.NextVersionIdMarker;
