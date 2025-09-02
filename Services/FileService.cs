@@ -42,6 +42,37 @@ namespace S3FileManager.Services
             return files;
         }
 
+        public List<FileNode> GetAllFiles(string path)
+        {
+            var nodes = new List<FileNode>();
+            var rootDir = new DirectoryInfo(path);
+
+            foreach (var file in rootDir.GetFiles("*", SearchOption.AllDirectories))
+            {
+                nodes.Add(new FileNode(
+                    file.Name,
+                    file.FullName,
+                    false,
+                    file.Length,
+                    file.LastWriteTimeUtc,
+                    new List<UserRole>() // Local files don't have roles
+                ));
+            }
+
+            foreach (var dir in rootDir.GetDirectories("*", SearchOption.AllDirectories))
+            {
+                nodes.Add(new FileNode(
+                    dir.Name,
+                    dir.FullName,
+                    true,
+                    0,
+                    dir.LastWriteTimeUtc,
+                    new List<UserRole>()
+                ));
+            }
+            return nodes;
+        }
+
         public string FormatFileSize(long bytes)
         {
             string[] sizes = { "B", "KB", "MB", "GB", "TB" };

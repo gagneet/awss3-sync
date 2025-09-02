@@ -17,9 +17,11 @@ namespace S3FileManager
         private readonly User _currentUser;
         private readonly S3Service _s3Service;
         private readonly FileService _fileService;
+        private readonly ComparisonService _comparisonService;
         private string _selectedLocalPath = "";
         private List<FileNode> _localFiles = new List<FileNode>();
         private List<FileNode> _s3Files = new List<FileNode>();
+        private List<FileComparisonResult> _comparisonResults = new List<FileComparisonResult>();
 
         // Performance optimization: Cache and selection tracking
         private readonly Dictionary<string, bool> _s3CheckedItems = new Dictionary<string, bool>();
@@ -31,6 +33,7 @@ namespace S3FileManager
             _currentUser = currentUser;
             _s3Service = new S3Service();
             _fileService = new FileService();
+            _comparisonService = new ComparisonService();
             InitializeComponent();
             this.Text = $"AWS S3 File Manager - {_currentUser.Username} ({_currentUser.Role})";
             SetupUserInterface();
@@ -54,18 +57,22 @@ namespace S3FileManager
             var mainPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
+                ColumnCount = 3,
                 RowCount = 1,
                 Padding = new Padding(10)
             };
-            mainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            mainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            mainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45F));
+            mainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            mainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45F));
 
             var leftPanel = CreateLocalPanel();
             mainPanel.Controls.Add(leftPanel, 0, 0);
 
+            var centerPanel = CreateComparePanel();
+            mainPanel.Controls.Add(centerPanel, 1, 0);
+
             var rightPanel = CreateS3Panel();
-            mainPanel.Controls.Add(rightPanel, 1, 0);
+            mainPanel.Controls.Add(rightPanel, 2, 0);
 
             var previewPanel = CreatePreviewPanel();
 
@@ -204,22 +211,24 @@ namespace S3FileManager
             };
 
             // Event handlers
+            s3TreeView.BeforeExpand += S3TreeView_BeforeExpand;
             s3TreeView.AfterCheck += TreeView_AfterCheck;
             s3TreeView.AfterSelect += TreeView_AfterSelect;
+            s3TreeView.MouseUp += S3TreeView_MouseUp;
+
+            // Context Menu for S3 files
+            var s3ContextMenu = new ContextMenuStrip();
+            var viewVersionsMenuItem = new ToolStripMenuItem("View Versions") { Name = "View Versions" };
+            viewVersionsMenuItem.Click += ViewVersionsMenuItem_Click;
+            s3ContextMenu.Items.Add(viewVersionsMenuItem);
+            s3ContextMenu.Opening += S3ContextMenu_Opening;
+            s3TreeView.ContextMenuStrip = s3ContextMenu;
 
             var buttonY = 530;
-            var listButton = new Button
-            {
-                Text = "List S3 Files",
-                Location = new Point(10, buttonY),
-                Size = new Size(100, 30)
-            };
-            listButton.Click += ListS3Button_Click;
-
             var downloadButton = new Button
             {
                 Text = "Download Selected",
-                Location = new Point(120, buttonY),
+                Location = new Point(10, buttonY),
                 Size = new Size(130, 30),
                 Enabled = _currentUser.Role != UserRole.User
             };
@@ -228,7 +237,7 @@ namespace S3FileManager
             var deleteButton = new Button
             {
                 Text = "Delete Selected",
-                Location = new Point(260, buttonY),
+                Location = new Point(150, buttonY),
                 Size = new Size(120, 30),
                 Enabled = _currentUser.Role == UserRole.Administrator
             };
@@ -237,7 +246,7 @@ namespace S3FileManager
             var permissionsButton = new Button
             {
                 Text = "Manage Permissions",
-                Location = new Point(390, buttonY),
+                Location = new Point(280, buttonY),
                 Size = new Size(130, 30),
                 Enabled = _currentUser.Role == UserRole.Administrator
             };
@@ -246,7 +255,7 @@ namespace S3FileManager
             var refreshButton = new Button
             {
                 Text = "Refresh",
-                Location = new Point(530, buttonY),
+                Location = new Point(420, buttonY),
                 Size = new Size(80, 30)
             };
             refreshButton.Click += RefreshS3Button_Click;
@@ -254,7 +263,7 @@ namespace S3FileManager
             var reviewPermissionsButton = new Button
             {
                 Text = "Review Permissions",
-                Location = new Point(620, buttonY),
+                Location = new Point(510, buttonY),
                 Size = new Size(120, 30),
                 Enabled = _currentUser.Role == UserRole.Administrator,
                 BackColor = Color.LightYellow,
@@ -299,10 +308,26 @@ namespace S3FileManager
             panel.Controls.AddRange(new Control[]
             {
                 headerLabel, bucketLabel, s3TreeView,
-                listButton, downloadButton, deleteButton, permissionsButton, refreshButton, reviewPermissionsButton,
+                downloadButton, deleteButton, permissionsButton, refreshButton, reviewPermissionsButton,
                 selectionLabel, searchLabel, searchTextBox, clearSearchButton
             });
 
+            return panel;
+        }
+
+        private Panel CreateComparePanel()
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(5) };
+            var compareButton = new Button
+            {
+                Text = "Compare >",
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                Location = new Point(10, 300),
+                Size = new Size(120, 40),
+                Anchor = AnchorStyles.None
+            };
+            compareButton.Click += CompareButton_Click;
+            panel.Controls.Add(compareButton);
             return panel;
         }
 

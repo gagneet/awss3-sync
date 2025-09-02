@@ -95,6 +95,76 @@ namespace S3FileManager
             }
         }
 
+        private void S3TreeView_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                var treeView = sender as TreeView;
+                var node = treeView.GetNodeAt(e.X, e.Y);
+                if (node != null)
+                {
+                    treeView.SelectedNode = node;
+                }
+            }
+        }
+
+        private void S3ContextMenu_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var menu = sender as ContextMenuStrip;
+            var treeView = menu.SourceControl as TreeView;
+            var selectedNode = treeView?.SelectedNode;
+
+            var viewVersionsMenuItem = menu.Items.Find("View Versions", false).FirstOrDefault();
+            if (viewVersionsMenuItem == null) return;
+
+            if (selectedNode?.Tag is FileNode fileNode && !fileNode.IsDirectory)
+            {
+                viewVersionsMenuItem.Enabled = true;
+            }
+            else
+            {
+                viewVersionsMenuItem.Enabled = false;
+            }
+        }
+
+        private async void ViewVersionsMenuItem_Click(object sender, EventArgs e)
+        {
+            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+            var selectedNode = s3TreeView?.SelectedNode;
+
+            if (!(selectedNode?.Tag is FileNode fileNode) || fileNode.IsDirectory)
+            {
+                return; // Should be disabled by the Opening event, but check again.
+            }
+
+            try
+            {
+                var versions = await _s3Service.GetFileVersionsAsync(fileNode.Path);
+                if (versions == null || !versions.Any())
+                {
+                    MessageBox.Show("No version history found for this file.", "No Versions", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // Need to use the fully qualified name to avoid conflict with the namespace
+                using (var versionForm = new S3FileManager.Forms.VersionHistoryForm(fileNode.Path, versions, _s3Service, _fileService))
+                {
+                    versionForm.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error retrieving version history: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void S3TreeView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
+        {
+            if (e.Node.Nodes.Count > 0 && e.Node.Nodes[0].Text == "Loading...")
+            {
+                await LoadS3DirectoryNodesAsync(e.Node);
+            }
+        }
 
         private void TreeView_AfterCheck(object sender, TreeViewEventArgs e)
         {
@@ -159,48 +229,126 @@ namespace S3FileManager
 
         private async void UploadButton_Click(object sender, EventArgs e)
         {
-            var selectedItems = GetCheckedLocalItems();
-            if (selectedItems.Count == 0)
+            // If a comparison has been run, perform a delta upload
+            if (_comparisonResults.Any())
             {
-                MessageBox.Show("Please select files or folders to upload.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                var toUpload = _comparisonResults.Where(r => r.Status == ComparisonStatus.LocalOnly || r.Status == ComparisonStatus.Modified).ToList();
+                if (!toUpload.Any())
+                {
+                    MessageBox.Show("No new or modified local files to upload.", "Nothing to Upload", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var confirmation = MessageBox.Show($"This will upload {toUpload.Count(r => r.Status == ComparisonStatus.LocalOnly)} new file(s) and {toUpload.Count(r => r.Status == ComparisonStatus.Modified)} modified file(s) to S3. Continue?", "Confirm Delta Upload", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (confirmation == DialogResult.No) return;
+
+                var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+                var selectedS3Node = s3TreeView?.SelectedNode;
+                var s3Dir = selectedS3Node?.Tag as FileNode;
+
+                foreach (var result in toUpload)
+                {
+                    var s3Key = Path.Combine(s3Dir.Path, result.RelativePath).Replace('\\', '/');
+                    var roles = new List<UserRole> { _currentUser.Role };
+                    await _s3Service.UploadFileAsync(result.LocalFile.Path, s3Key, roles);
+                }
+                MessageBox.Show("Delta upload complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else // Otherwise, perform a standard selection-based upload
+            {
+                var selectedItems = GetCheckedLocalItems();
+                if (selectedItems.Count == 0)
+                {
+                    MessageBox.Show("Please select files or folders to upload.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var roles = new List<UserRole> { _currentUser.Role };
+                foreach (var item in selectedItems)
+                {
+                    if (item.IsDirectory)
+                    {
+                        await _s3Service.UploadDirectoryAsync(item.Path, item.Name, roles);
+                    }
+                    else
+                    {
+                        await _s3Service.UploadFileAsync(item.Path, item.Name, roles);
+                    }
+                }
+                MessageBox.Show("Upload complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
 
-            // Simplified for now, will need to be updated with role logic
-            var roles = new List<UserRole> { _currentUser.Role };
-
-            foreach (var item in selectedItems)
-            {
-                if (item.IsDirectory)
-                {
-                    await _s3Service.UploadDirectoryAsync(item.Path, item.Name, roles);
-                }
-                else
-                {
-                    await _s3Service.UploadFileAsync(item.Path, item.Name, roles);
-                }
-            }
-            MessageBox.Show("Upload complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            // Refresh the S3 view and re-run comparison to show updated state
             await LoadS3FilesAsync();
+            if (_comparisonResults.Any())
+            {
+                CompareButton_Click(this, EventArgs.Empty);
+            }
         }
 
         private async void DownloadButton_Click(object sender, EventArgs e)
         {
-            var selectedItems = GetCheckedS3Items();
-            if (selectedItems.Count == 0)
+            // If a comparison has been run, perform a delta download
+            if (_comparisonResults.Any())
             {
-                MessageBox.Show("Please select files or folders to download.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                var toDownload = _comparisonResults.Where(r => r.Status == ComparisonStatus.S3Only || r.Status == ComparisonStatus.Modified).ToList();
+                if (!toDownload.Any())
+                {
+                    MessageBox.Show("No new or modified S3 files to download.", "Nothing to Download", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var confirmation = MessageBox.Show($"This will download {toDownload.Count(r => r.Status == ComparisonStatus.S3Only)} new file(s) and {toDownload.Count(r => r.Status == ComparisonStatus.Modified)} modified file(s) from S3. Continue?", "Confirm Delta Download", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (confirmation == DialogResult.No) return;
+
+                var localTreeView = this.Controls.Find("localTreeView", true).FirstOrDefault() as TreeView;
+                var selectedLocalNode = localTreeView?.SelectedNode;
+                var localDir = selectedLocalNode?.Tag as FileNode;
+
+                foreach (var result in toDownload)
+                {
+                    var localPath = Path.Combine(localDir.Path, result.RelativePath);
+                    var localDirForFile = Path.GetDirectoryName(localPath);
+                    if (!Directory.Exists(localDirForFile))
+                    {
+                        Directory.CreateDirectory(localDirForFile);
+                    }
+                    await _s3Service.DownloadFileAsync(result.S3File.Path, localDirForFile);
+                }
+                MessageBox.Show("Delta download complete.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else // Otherwise, perform a standard selection-based download
+            {
+                var selectedItems = GetCheckedS3Items();
+                if (selectedItems.Count == 0)
+                {
+                    MessageBox.Show("Please select files or folders to download.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                string downloadPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "S3Downloads");
+                Directory.CreateDirectory(downloadPath);
+
+                foreach (var item in selectedItems)
+                {
+                    // This is a simplified download, a real implementation would handle folders.
+                    if (!item.IsDirectory)
+                    {
+                        await _s3Service.DownloadFileAsync(item.Path, downloadPath);
+                    }
+                }
+                MessageBox.Show($"Downloaded to {downloadPath}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
 
-            string downloadPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "S3Downloads");
-            Directory.CreateDirectory(downloadPath);
-
-            foreach (var item in selectedItems)
+            // Refresh the local view and re-run comparison to show updated state
+            if (!string.IsNullOrEmpty(_selectedLocalPath))
             {
-                await _s3Service.DownloadFileAsync(item.Path, downloadPath);
+                LoadLocalFiles(_selectedLocalPath);
             }
-            MessageBox.Show($"Downloaded to {downloadPath}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (_comparisonResults.Any())
+            {
+                CompareButton_Click(this, EventArgs.Empty);
+            }
         }
 
         private async void DeleteButton_Click(object sender, EventArgs e)
@@ -262,13 +410,9 @@ namespace S3FileManager
             MessageBox.Show("Sync functionality is not fully implemented due to missing UI components (SyncDirectionForm).", "Not Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private async void ListS3Button_Click(object sender, EventArgs e)
-        {
-            await LoadS3FilesAsync();
-        }
-
         private async void RefreshS3Button_Click(object sender, EventArgs e)
         {
+            // Reload the entire S3 tree from the root
             await LoadS3FilesAsync();
         }
 
@@ -291,6 +435,41 @@ namespace S3FileManager
             if (searchTextBox != null)
             {
                 searchTextBox.Clear();
+            }
+        }
+
+        private async void CompareButton_Click(object sender, EventArgs e)
+        {
+            var localTreeView = this.Controls.Find("localTreeView", true).FirstOrDefault() as TreeView;
+            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
+
+            var selectedLocalNode = localTreeView?.SelectedNode;
+            var selectedS3Node = s3TreeView?.SelectedNode;
+
+            if (!(selectedLocalNode?.Tag is FileNode localDir) || !localDir.IsDirectory ||
+                !(selectedS3Node?.Tag is FileNode s3Dir) || !s3Dir.IsDirectory)
+            {
+                MessageBox.Show("Please select a local folder and an S3 folder to compare.", "Selection Required", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Reset colors before running a new comparison
+            ResetTreeViewColors();
+
+            try
+            {
+                var localFiles = _fileService.GetAllFiles(localDir.Path);
+                var s3Files = await _s3Service.ListAllFilesAsync(s3Dir.Path, _currentUser.Role);
+
+                _comparisonResults = _comparisonService.CompareDirectories(localDir, s3Dir, localFiles, s3Files);
+
+                ApplyComparisonToTrees();
+
+                MessageBox.Show($"Comparison complete. Found {_comparisonResults.Count(r => r.Status != ComparisonStatus.Identical)} differences.", "Comparison Finished", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An error occurred during comparison: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

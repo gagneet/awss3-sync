@@ -25,65 +25,37 @@ namespace S3FileManager.Services
             _metadataService = new MetadataService(_s3Client, _bucketName);
         }
 
-        public async Task<List<FileNode>> ListFilesAsync(UserRole userRole)
+        public async Task<List<FileNode>> ListFilesAsync(UserRole userRole, string prefix = "")
         {
-            var flatList = await GetFlatS3FileList(userRole);
-            return BuildS3Hierarchy(flatList);
-        }
-
-        private List<FileNode> BuildS3Hierarchy(List<S3FileItem> s3Files)
-        {
-            var fileNodes = new Dictionary<string, FileNode>();
-            var rootNodes = new List<FileNode>();
-
-            foreach (var s3File in s3Files.OrderBy(f => f.Key))
+            var nodes = new List<FileNode>();
+            var request = new ListObjectsV2Request
             {
-                var parts = s3File.Key.TrimEnd('/').Split('/');
-                FileNode parent = null;
-                string currentPath = "";
+                BucketName = _bucketName,
+                Prefix = prefix,
+                Delimiter = "/"
+            };
 
-                for (int i = 0; i < parts.Length; i++)
-                {
-                    string part = parts[i];
-                    currentPath += part;
-                    bool isDir = i < parts.Length - 1 || s3File.Key.EndsWith("/");
-                    if (isDir)
-                    {
-                        currentPath += "/";
-                    }
-
-                    if (!fileNodes.TryGetValue(currentPath, out var node))
-                    {
-                        node = new FileNode(part, currentPath, isDir, isDir ? 0 : s3File.Size, s3File.LastModified, s3File.AccessRoles);
-                        fileNodes.Add(currentPath, node);
-
-                        if (parent != null)
-                        {
-                            if (!parent.Children.Any(c => c.Path == node.Path))
-                                parent.Children.Add(node);
-                        }
-                        else
-                        {
-                            if (!rootNodes.Any(r => r.Path == node.Path))
-                                rootNodes.Add(node);
-                        }
-                    }
-                    parent = node;
-                }
-            }
-            return rootNodes;
-        }
-
-        private async Task<List<S3FileItem>> GetFlatS3FileList(UserRole userRole)
-        {
-            var files = new List<S3FileItem>();
-            var request = new ListObjectsV2Request { BucketName = _bucketName, MaxKeys = 1000 };
             ListObjectsV2Response response;
             do
             {
                 response = await _s3Client.ListObjectsV2Async(request);
+
+                // Add "sub-folders"
+                foreach (var commonPrefix in response.CommonPrefixes)
+                {
+                    var parts = commonPrefix.TrimEnd('/').Split('/');
+                    var name = parts.LastOrDefault();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        nodes.Add(new FileNode(name, commonPrefix, true, 0, DateTime.MinValue, new List<UserRole>()));
+                    }
+                }
+
+                // Add files
                 foreach (var obj in response.S3Objects)
                 {
+                    if (obj.Key == prefix || obj.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)) continue;
+
                     var accessRoles = await _metadataService.GetFileAccessRolesAsync(obj.Key);
                     var item = new S3FileItem
                     {
@@ -92,15 +64,22 @@ namespace S3FileManager.Services
                         LastModified = obj.LastModified ?? DateTime.MinValue,
                         AccessRoles = accessRoles
                     };
+
                     if (CanUserAccessFile(userRole, item))
                     {
-                        files.Add(item);
+                        var parts = obj.Key.TrimEnd('/').Split('/');
+                        var name = parts.LastOrDefault();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            nodes.Add(new FileNode(name, obj.Key, false, obj.Size ?? 0, obj.LastModified ?? DateTime.MinValue, accessRoles));
+                        }
                     }
                 }
+
                 request.ContinuationToken = response.NextContinuationToken;
             } while (response.IsTruncated.GetValueOrDefault());
-            files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
-            return FilterFilesForRole(files, userRole);
+
+            return nodes.OrderBy(n => n.IsDirectory ? 0 : 1).ThenBy(n => n.Name).ToList();
         }
 
         private bool CanUserAccessFile(UserRole userRole, S3FileItem item)
@@ -245,7 +224,7 @@ namespace S3FileManager.Services
             }
         }
 
-        public async Task<string> DownloadFileAsync(string s3Key, string localDirectory)
+        public async Task<string> DownloadFileAsync(string s3Key, string localDirectory, string versionId = null)
         {
             string fileName = Path.GetFileName(s3Key);
             if (string.IsNullOrEmpty(fileName))
@@ -258,7 +237,8 @@ namespace S3FileManager.Services
             var request = new GetObjectRequest
             {
                 BucketName = _bucketName,
-                Key = s3Key
+                Key = s3Key,
+                VersionId = versionId
             };
 
             using (var response = await _s3Client.GetObjectAsync(request))
@@ -305,6 +285,80 @@ namespace S3FileManager.Services
                 ".zip" => "application/zip",
                 _ => "application/octet-stream",
             };
+        }
+
+        public async Task<List<FileNode>> ListAllFilesAsync(string prefix, UserRole userRole)
+        {
+            var files = new List<FileNode>();
+            var request = new ListObjectsV2Request
+            {
+                BucketName = _bucketName,
+                Prefix = prefix
+            };
+
+            ListObjectsV2Response response;
+            do
+            {
+                response = await _s3Client.ListObjectsV2Async(request);
+                foreach (var obj in response.S3Objects)
+                {
+                    if (obj.Key == prefix || obj.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    var accessRoles = await _metadataService.GetFileAccessRolesAsync(obj.Key);
+                    var item = new S3FileItem
+                    {
+                        Key = obj.Key,
+                        Size = obj.Size ?? 0,
+                        LastModified = obj.LastModified ?? DateTime.MinValue,
+                        AccessRoles = accessRoles
+                    };
+
+                    if (CanUserAccessFile(userRole, item))
+                    {
+                        var parts = obj.Key.TrimEnd('/').Split('/');
+                        var name = parts.LastOrDefault();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            files.Add(new FileNode(name, obj.Key, obj.Key.EndsWith("/"), obj.Size ?? 0, obj.LastModified ?? DateTime.MinValue, accessRoles));
+                        }
+                    }
+                }
+                request.ContinuationToken = response.NextContinuationToken;
+            } while (response.IsTruncated.GetValueOrDefault());
+
+            return files;
+        }
+
+        public async Task<List<FileNode>> GetFileVersionsAsync(string key)
+        {
+            var versions = new List<FileNode>();
+            var request = new ListVersionsRequest
+            {
+                BucketName = _bucketName,
+                Prefix = key
+            };
+
+            ListVersionsResponse response;
+            do
+            {
+                response = await _s3Client.ListVersionsAsync(request);
+                foreach (var version in response.Versions)
+                {
+                    if (version.Key != key) continue;
+
+                    versions.Add(new FileNode(
+                        version.Key,
+                        version.Key,
+                        version.Size,
+                        version.LastModified,
+                        version.VersionId
+                    ));
+                }
+                request.NextKeyMarker = response.NextKeyMarker;
+                request.NextVersionIdMarker = response.NextVersionIdMarker;
+            } while (response.IsTruncated);
+
+            return versions;
         }
 
         public void Dispose()
