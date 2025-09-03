@@ -32,19 +32,19 @@ namespace AWSS3Sync.Services
                         user.AwsAccessKeyId!,
                         user.AwsSecretAccessKey!,
                         user.AwsSessionToken);
-                    _s3Client = new AmazonS3Client(credentials, awsConfig);
+                    _s3Client = new AmazonS3Client(credentials, awsConfig.RegionEndpoint);
                 }
                 else
                 {
                     // Use permanent credentials
-                    _s3Client = new AmazonS3Client(user.AwsAccessKeyId, user.AwsSecretAccessKey, awsConfig);
+                    _s3Client = new AmazonS3Client(user.AwsAccessKeyId, user.AwsSecretAccessKey, awsConfig.RegionEndpoint);
                 }
                 _hasValidCredentials = true;
             }
             else
             {
                 // Fall back to config-based credentials (legacy support)
-                _s3Client = new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
+                _s3Client = new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig.RegionEndpoint);
                 _hasValidCredentials = !string.IsNullOrEmpty(config.AWS.AccessKey) && !string.IsNullOrEmpty(config.AWS.SecretKey);
             }
             
@@ -67,16 +67,52 @@ namespace AWSS3Sync.Services
 
         public async Task<List<FileNode>> ListFilesAsync(UserRole userRole, string prefix = "")
         {
-            // ValidateCredentials("list S3 files");
-            // var flatList = await GetFlatS3FileList(userRole);
-            // return BuildS3Hierarchy(flatList);
+            ValidateCredentials("list S3 files");
+
             var nodes = new List<FileNode>();
             var request = new ListObjectsV2Request
             {
                 BucketName = _bucketName,
                 Prefix = prefix,
                 Delimiter = "/"
-            };			
+            };
+
+            ListObjectsV2Response response = await _s3Client.ListObjectsV2Async(request);
+
+            // Add "sub-folders"
+            foreach (var commonPrefix in response.CommonPrefixes)
+            {
+                if (commonPrefix.Prefix != null)
+                {
+                    var parts = commonPrefix.Prefix.TrimEnd('/').Split('/');
+                    var name = parts.LastOrDefault();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        nodes.Add(new FileNode(name, commonPrefix.Prefix, true, 0, DateTime.MinValue, new List<UserRole>()));
+                    }
+                }
+            }
+
+            // Add files
+            foreach (var obj in response.S3Objects)
+            {
+                if (obj.Key == prefix) continue; // Don't add the directory itself as a file
+
+                var accessRoles = await _metadataService.GetFileAccessRolesAsync(obj.Key);
+                // Here we assume that CanUserAccessFile works correctly with the S3FileItem.
+                var item = new S3FileItem { Key = obj.Key, Size = obj.Size, LastModified = obj.LastModified, AccessRoles = accessRoles };
+                if (CanUserAccessFile(userRole, item))
+                {
+                    var parts = obj.Key.TrimEnd('/').Split('/');
+                    var name = parts.LastOrDefault();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        nodes.Add(new FileNode(name, obj.Key, false, obj.Size, obj.LastModified, accessRoles));
+                    }
+                }
+            }
+
+            return nodes.OrderBy(n => n.IsDirectory ? 0 : 1).ThenBy(n => n.Name).ToList();
         }
 
         private List<FileNode> BuildS3Hierarchy(List<S3FileItem> s3Files)
@@ -134,46 +170,29 @@ namespace AWSS3Sync.Services
                 // Add "sub-folders"
                 foreach (var commonPrefix in response.CommonPrefixes)
                 {
-                    var parts = commonPrefix.TrimEnd('/').Split('/');
-                    var name = parts.LastOrDefault();
-                    if (!string.IsNullOrEmpty(name))
-                    {
-                        nodes.Add(new FileNode(name, commonPrefix, true, 0, DateTime.MinValue, new List<UserRole>()));
-                    }
+                    files.Add(new S3FileItem { Key = commonPrefix.Prefix, Size = 0, LastModified = DateTime.MinValue, AccessRoles = new List<UserRole>() });
                 }
 
                 // Add files
                 foreach (var obj in response.S3Objects)
                 {
-                    if (obj.Key == prefix || obj.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (obj.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)) continue;
 
                     var accessRoles = await _metadataService.GetFileAccessRolesAsync(obj.Key);
                     var item = new S3FileItem
                     {
                         Key = obj.Key,
-                        Size = obj.Size ?? 0,
-                        LastModified = obj.LastModified ?? DateTime.MinValue,
+                        Size = obj.Size,
+                        LastModified = obj.LastModified,
                         AccessRoles = accessRoles
                     };
-
-                    if (CanUserAccessFile(userRole, item))
-                    {
-                        // files.Add(item);					
-                        var parts = obj.Key.TrimEnd('/').Split('/');
-                        var name = parts.LastOrDefault();
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            nodes.Add(new FileNode(name, obj.Key, false, obj.Size ?? 0, obj.LastModified ?? DateTime.MinValue, accessRoles));
-                        }
-                    }
+                    files.Add(item);
                 }
 
                 request.ContinuationToken = response.NextContinuationToken;
-            } while (response.IsTruncated.GetValueOrDefault());
+            } while (response.IsTruncated);
 
-            return nodes.OrderBy(n => n.IsDirectory ? 0 : 1).ThenBy(n => n.Name).ToList();
-            // files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
-            // return FilterFilesForRole(files, userRole);
+            return FilterFilesForRole(files, userRole);
         }
 
         private bool CanUserAccessFile(UserRole userRole, S3FileItem item)
@@ -252,7 +271,7 @@ namespace AWSS3Sync.Services
                 var metadata = await _s3Client.GetObjectMetadataAsync(request);
                 return new S3ObjectAttributes
                 {
-                    LastModified = metadata.LastModified?.ToUniversalTime() ?? DateTime.UtcNow,
+                    LastModified = metadata.LastModified.ToUniversalTime(),
                     Size = metadata.ContentLength
                 };
             }
@@ -415,8 +434,8 @@ namespace AWSS3Sync.Services
                     var item = new S3FileItem
                     {
                         Key = obj.Key,
-                        Size = obj.Size ?? 0,
-                        LastModified = obj.LastModified ?? DateTime.MinValue,
+                        Size = obj.Size,
+                        LastModified = obj.LastModified,
                         AccessRoles = accessRoles
                     };
 
@@ -426,12 +445,12 @@ namespace AWSS3Sync.Services
                         var name = parts.LastOrDefault();
                         if (!string.IsNullOrEmpty(name))
                         {
-                            files.Add(new FileNode(name, obj.Key, obj.Key.EndsWith("/"), obj.Size ?? 0, obj.LastModified ?? DateTime.MinValue, accessRoles));
+                            files.Add(new FileNode(name, obj.Key, obj.Key.EndsWith("/"), obj.Size, obj.LastModified, accessRoles));
                         }
                     }
                 }
                 request.ContinuationToken = response.NextContinuationToken;
-            } while (response.IsTruncated.GetValueOrDefault());
+            } while (response.IsTruncated);
 
             return files;
         }
@@ -457,8 +476,8 @@ namespace AWSS3Sync.Services
                         version.Key,
                         version.Key,
                         false,
-                        version.Size ?? 0,
-                        version.LastModified ?? DateTime.UtcNow,
+                        version.Size,
+                        version.LastModified,
                         new List<UserRole>()
                     );
                     node.VersionId = version.VersionId;
@@ -466,7 +485,7 @@ namespace AWSS3Sync.Services
                 }
                 request.KeyMarker = response.NextKeyMarker;
                 request.VersionIdMarker = response.NextVersionIdMarker;
-            } while (response.IsTruncated == true);
+            } while (response.IsTruncated);
 
             return versions;
         }

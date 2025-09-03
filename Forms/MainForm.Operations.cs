@@ -258,93 +258,22 @@ namespace AWSS3Sync
         private void ResetTreeViewColors()
         {
             var localTreeView = this.Controls.Find("localTreeView", true).FirstOrDefault() as TreeView;
-            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
-
             if (localTreeView != null)
             {
-                GetCheckedNodes(localTreeView.Nodes, checkedItems);
-            }
-            return checkedItems;
-        }
-
-        #endregion
-
-        #region S3 Operations
-
-        private async Task LoadS3FilesAsync()
-        {
-            try
-            {
-                var bucketLabel = this.Controls.Find("bucketLabel", true).FirstOrDefault() as Label;
-                if (this.InvokeRequired)
+                foreach (TreeNode node in localTreeView.Nodes)
                 {
-                    this.Invoke(new Action(() => bucketLabel.Text = "Loading..."));
-                }
-                else
-                {
-                    bucketLabel.Text = "Loading...";
-                }
-
-                _s3Files = await _s3Service.ListFilesAsync(_currentUser.Role);
-                if (this.InvokeRequired)
-                {
-                    this.Invoke(new Action(UpdateS3TreeView));
-                }
-                else
-                {
-                    UpdateS3TreeView();
+                    ResetNodeColor(node);
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error loading S3 files: {ex.Message}", "S3 Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
 
-        private void UpdateS3TreeView()
-        {
-            var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
-            if (s3TreeView == null) return;
-
-            s3TreeView.Nodes.Clear();
-            _s3CheckedItems.Clear();
-
-            foreach (var fileNode in _s3Files)
-            {
-                var treeNode = new TreeNode(fileNode.Name) { Tag = fileNode };
-                s3TreeView.Nodes.Add(treeNode);
-                AddChildTreeNodes(treeNode, fileNode.Children);
-            }
-
-            UpdateS3SelectionCount();
-        }
-
-        private void AddChildTreeNodes(TreeNode parentTreeNode, List<FileNode> children)
-        {
-            foreach (var fileNode in children)
-            {
-                var treeNode = new TreeNode(fileNode.Name) { Tag = fileNode };
-                parentTreeNode.Nodes.Add(treeNode);
-                if (fileNode.Children.Any())
-                {
-                    AddChildTreeNodes(treeNode, fileNode.Children);
-                }
-            }
-        }
-
-        private List<FileNode> GetCheckedS3Items()
-        {
-            var checkedItems = new List<FileNode>();
             var s3TreeView = this.Controls.Find("s3TreeView", true).FirstOrDefault() as TreeView;
             if (s3TreeView != null)
             {
-                GetCheckedNodes(s3TreeView.Nodes, checkedItems);
-                // foreach (TreeNode node in s3TreeView.Nodes)
-                // {
-                //     ResetNodeColor(node);
-                // }
+                foreach (TreeNode node in s3TreeView.Nodes)
+                {
+                    ResetNodeColor(node);
+                }
             }
-            return checkedItems;
         }
 
         private void ResetNodeColor(TreeNode node)
@@ -355,21 +284,5 @@ namespace AWSS3Sync
                 ResetNodeColor(child);
             }
         }
-		
-        private void GetCheckedNodes(TreeNodeCollection nodes, List<FileNode> checkedItems)
-        {
-            foreach (TreeNode node in nodes)
-            {
-                if (node.Checked && node.Tag is FileNode fileNode)
-                {
-                    checkedItems.Add(fileNode);
-                }
-                if (node.Nodes.Count > 0)
-                {
-                    GetCheckedNodes(node.Nodes, checkedItems);
-                }
-            }
-        }
-        #endregion
     }
 }

@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using CognitoUserModel = S3FileManager.Models.CognitoUser;
 
-namespace S3FileManager.Models
+namespace AWSS3Sync.Models
 {
     /// <summary>
     /// Unified user model that abstracts both Cognito and local authentication
@@ -60,7 +59,7 @@ namespace S3FileManager.Models
         /// <summary>
         /// Create UnifiedUser from CognitoUser
         /// </summary>
-        public static UnifiedUser FromCognitoUser(CognitoUserModel cognitoUser)
+        public static UnifiedUser FromCognitoUser(CognitoUser cognitoUser)
         {
             return new UnifiedUser
             {
