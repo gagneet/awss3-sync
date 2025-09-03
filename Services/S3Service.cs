@@ -82,7 +82,7 @@ namespace AWSS3Sync.Services
             // Add "sub-folders"
             foreach (var commonPrefix in response.CommonPrefixes)
             {
-                if (commonPrefix != null)
+                if (!string.IsNullOrEmpty(commonPrefix))
                 {
                     var parts = commonPrefix.TrimEnd('/').Split('/');
                     var name = parts.LastOrDefault();
@@ -127,7 +127,10 @@ namespace AWSS3Sync.Services
                 // Add "sub-folders"
                 foreach (var commonPrefix in response.CommonPrefixes)
                 {
-                    files.Add(new S3FileItem { Key = commonPrefix, Size = 0, LastModified = DateTime.MinValue, AccessRoles = new List<UserRole>() });
+                    if (!string.IsNullOrEmpty(commonPrefix))
+                    {
+                        files.Add(new S3FileItem { Key = commonPrefix, Size = 0, LastModified = DateTime.MinValue, AccessRoles = new List<UserRole>() });
+                    }
                 }
 
                 // Add files
