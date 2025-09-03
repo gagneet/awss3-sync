@@ -10,20 +10,23 @@ namespace AWSS3Sync.Tests
     /// </summary>
     public class UnifiedAuthTests
     {
-        public static void RunBasicTests()
+        public static Task RunBasicTests()
         {
-            Console.WriteLine("Starting Unified Authentication System Tests...\n");
+            return Task.Run(() =>
+            {
+                Console.WriteLine("Starting Unified Authentication System Tests...\n");
 
-            // Test 1: UnifiedUser creation from local user
-            TestUnifiedUserFromLocal();
+                // Test 1: UnifiedUser creation from local user
+                TestUnifiedUserFromLocal();
 
-            // Test 2: Authentication result creation
-            TestAuthenticationResults();
+                // Test 2: Authentication result creation
+                TestAuthenticationResults();
 
-            // Test 3: UnifiedAuthService initialization
-            TestUnifiedAuthServiceInitialization();
+                // Test 3: UnifiedAuthService initialization
+                TestUnifiedAuthServiceInitialization();
 
-            Console.WriteLine("\nAll tests completed!");
+                Console.WriteLine("\nAll tests completed!");
+            });
         }
 
         private static void TestUnifiedUserFromLocal()
