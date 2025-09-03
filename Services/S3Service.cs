@@ -68,6 +68,7 @@ namespace AWSS3Sync.Services
         public async Task<List<FileNode>> ListFilesAsync(UserRole userRole, string prefix = "")
         {
             ValidateCredentials("list S3 files");
+
             var nodes = new List<FileNode>();
             var request = new ListObjectsV2Request
             {
@@ -76,13 +77,12 @@ namespace AWSS3Sync.Services
                 Delimiter = "/"
             };
 
-            ListObjectsV2Response response;
-            do
-            {
-                response = await _s3Client.ListObjectsV2Async(request);
+            ListObjectsV2Response response = await _s3Client.ListObjectsV2Async(request);
 
-                // Add "sub-folders"
-                foreach (var commonPrefix in response.CommonPrefixes)
+            // Add "sub-folders"
+            foreach (var commonPrefix in response.CommonPrefixes)
+            {
+                if (commonPrefix.Prefix != null)
                 {
                     var parts = commonPrefix.Prefix.TrimEnd('/').Split('/');
                     var name = parts.LastOrDefault();
@@ -91,11 +91,92 @@ namespace AWSS3Sync.Services
                         nodes.Add(new FileNode(name, commonPrefix.Prefix, true, 0, DateTime.MinValue, new List<UserRole>()));
                     }
                 }
+            }
+
+            // Add files
+            foreach (var obj in response.S3Objects)
+            {
+                if (obj.Key == prefix) continue; // Don't add the directory itself as a file
+
+                var accessRoles = await _metadataService.GetFileAccessRolesAsync(obj.Key);
+                // Here we assume that CanUserAccessFile works correctly with the S3FileItem.
+                var item = new S3FileItem { Key = obj.Key, Size = obj.Size, LastModified = obj.LastModified, AccessRoles = accessRoles };
+                if (CanUserAccessFile(userRole, item))
+                {
+                    var parts = obj.Key.TrimEnd('/').Split('/');
+                    var name = parts.LastOrDefault();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        nodes.Add(new FileNode(name, obj.Key, false, obj.Size, obj.LastModified, accessRoles));
+                    }
+                }
+            }
+
+            return nodes.OrderBy(n => n.IsDirectory ? 0 : 1).ThenBy(n => n.Name).ToList();
+        }
+
+        private List<FileNode> BuildS3Hierarchy(List<S3FileItem> s3Files)
+        {
+            var fileNodes = new Dictionary<string, FileNode>();
+            var rootNodes = new List<FileNode>();
+
+            foreach (var s3File in s3Files.OrderBy(f => f.Key))
+            {
+                var parts = s3File.Key.TrimEnd('/').Split('/');
+                FileNode parent = null;
+                string currentPath = "";
+
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    string part = parts[i];
+                    currentPath += part;
+                    bool isDir = i < parts.Length - 1 || s3File.Key.EndsWith("/");
+                    if (isDir)
+                    {
+                        currentPath += "/";
+                    }
+
+                    if (!fileNodes.TryGetValue(currentPath, out var node))
+                    {
+                        node = new FileNode(part, currentPath, isDir, isDir ? 0 : s3File.Size, s3File.LastModified, s3File.AccessRoles);
+                        fileNodes.Add(currentPath, node);
+
+                        if (parent != null)
+                        {
+                            if (!parent.Children.Any(c => c.Path == node.Path))
+                                parent.Children.Add(node);
+                        }
+                        else
+                        {
+                            if (!rootNodes.Any(r => r.Path == node.Path))
+                                rootNodes.Add(node);
+                        }
+                    }
+                    parent = node;
+                }
+            }
+            return rootNodes;
+        }
+
+        private async Task<List<S3FileItem>> GetFlatS3FileList(UserRole userRole)
+        {
+            var files = new List<S3FileItem>();
+            var request = new ListObjectsV2Request { BucketName = _bucketName, MaxKeys = 1000 };
+            ListObjectsV2Response response;
+            do
+            {
+                response = await _s3Client.ListObjectsV2Async(request);
+
+                // Add "sub-folders"
+                foreach (var commonPrefix in response.CommonPrefixes)
+                {
+                    files.Add(new S3FileItem { Key = commonPrefix.Prefix, Size = 0, LastModified = DateTime.MinValue, AccessRoles = new List<UserRole>() });
+                }
 
                 // Add files
                 foreach (var obj in response.S3Objects)
                 {
-                    if (obj.Key == prefix) continue; // Don't add the directory itself as a file
+                    if (obj.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)) continue;
 
                     var accessRoles = await _metadataService.GetFileAccessRolesAsync(obj.Key);
                     var item = new S3FileItem
@@ -105,22 +186,13 @@ namespace AWSS3Sync.Services
                         LastModified = obj.LastModified,
                         AccessRoles = accessRoles
                     };
-
-                    if (CanUserAccessFile(userRole, item))
-                    {
-                        var parts = obj.Key.TrimEnd('/').Split('/');
-                        var name = parts.LastOrDefault();
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            nodes.Add(new FileNode(name, obj.Key, false, obj.Size, obj.LastModified, accessRoles));
-                        }
-                    }
+                    files.Add(item);
                 }
 
                 request.ContinuationToken = response.NextContinuationToken;
             } while (response.IsTruncated);
 
-            return nodes.OrderBy(n => n.IsDirectory ? 0 : 1).ThenBy(n => n.Name).ToList();
+            return FilterFilesForRole(files, userRole);
         }
 
         private bool CanUserAccessFile(UserRole userRole, S3FileItem item)
@@ -140,12 +212,57 @@ namespace AWSS3Sync.Services
             }
         }
 
+        private List<S3FileItem> FilterFilesForRole(List<S3FileItem> files, UserRole userRole)
+        {
+            if (userRole == UserRole.Administrator)
+                return files;
+
+            var filteredFiles = new List<S3FileItem>();
+            var accessiblePaths = new HashSet<string>();
+
+            foreach (var file in files)
+            {
+                if (CanUserAccessFile(userRole, file))
+                {
+                    filteredFiles.Add(file);
+                    var pathParts = file.Key.Split('/');
+                    var currentPath = "";
+                    for (int i = 0; i < pathParts.Length - 1; i++)
+                    {
+                        currentPath += pathParts[i] + "/";
+                        accessiblePaths.Add(currentPath);
+                    }
+                }
+            }
+
+            foreach (var path in accessiblePaths)
+            {
+                if (!filteredFiles.Any(f => f.Key == path))
+                {
+                    filteredFiles.Add(new S3FileItem
+                    {
+                        Key = path,
+                        Size = 0,
+                        LastModified = DateTime.Now,
+                        AccessRoles = new List<UserRole> { userRole }
+                    });
+                }
+            }
+
+            return filteredFiles.OrderBy(f => f.Key).ToList();
+        }
+
         private class S3ObjectAttributes
         {
             public DateTime LastModified { get; set; }
             public long Size { get; set; }
         }
 
+        /// <summary>
+        /// Gets the metadata attributes (LastModified and Size) for an S3 object.
+        /// </summary>
+        /// <param name="key">The key of the S3 object.</param>
+        /// <returns>An <see cref="S3ObjectAttributes"/> object, or <c>null</c> if the object is not found.</returns>
         private async Task<S3ObjectAttributes?> GetS3ObjectAttributesAsync(string key)
         {
             try
