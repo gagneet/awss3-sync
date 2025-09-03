@@ -16,30 +16,24 @@ namespace AWSS3Sync
             var fileNode = e.Node?.Tag as FileNode;
             if (fileNode == null) return;
 
-            var previewInfoLabel = this.Controls.Find("previewInfoLabel", true).FirstOrDefault() as Label;
-            var previewTextBox = this.Controls.Find("previewTextBox", true).FirstOrDefault() as RichTextBox;
-            var previewPictureBox = this.Controls.Find("previewPictureBox", true).FirstOrDefault() as PictureBox;
+            // Use the class fields directly, which are initialized in CreatePreviewPanel()
+            // This avoids repeated, inefficient calls to Controls.Find() and makes the code cleaner.
 
             // Reset preview controls
-            if (previewInfoLabel != null) previewInfoLabel.Visible = true;
-            if (previewTextBox != null)
+            previewInfoLabel.Visible = true;
+            previewTextBox.Visible = false;
+            previewTextBox.Clear();
+
+            previewPictureBox.Visible = false;
+            if (previewPictureBox.Image != null)
             {
-                previewTextBox.Visible = false;
-                previewTextBox.Clear();
-            }
-            if (previewPictureBox != null)
-            {
-                previewPictureBox.Visible = false;
-                if (previewPictureBox.Image != null)
-                {
-                    previewPictureBox.Image.Dispose();
-                    previewPictureBox.Image = null;
-                }
+                previewPictureBox.Image.Dispose();
+                previewPictureBox.Image = null;
             }
 
             if (fileNode.IsDirectory)
             {
-                if (previewInfoLabel != null) previewInfoLabel.Text = $"Directory: {fileNode.Name}";
+                previewInfoLabel.Text = $"Directory: {fileNode.Name}";
                 return;
             }
 

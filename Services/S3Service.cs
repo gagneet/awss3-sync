@@ -80,6 +80,8 @@ namespace AWSS3Sync.Services
             ListObjectsV2Response response = await _s3Client.ListObjectsV2Async(request);
 
             // Add "sub-folders"
+            // After a likely SDK update, response.CommonPrefixes is now a List<string> containing the full prefix paths.
+            // It was previously a list of objects with a .Prefix property. We must guard against null or empty strings.
             foreach (var commonPrefix in response.CommonPrefixes)
             {
                 if (!string.IsNullOrEmpty(commonPrefix))
@@ -125,6 +127,8 @@ namespace AWSS3Sync.Services
                 response = await _s3Client.ListObjectsV2Async(request);
 
                 // Add "sub-folders"
+                // After a likely SDK update, response.CommonPrefixes is now a List<string> containing the full prefix paths.
+                // It was previously a list of objects with a .Prefix property. We must guard against null or empty strings.
                 foreach (var commonPrefix in response.CommonPrefixes)
                 {
                     if (!string.IsNullOrEmpty(commonPrefix))
