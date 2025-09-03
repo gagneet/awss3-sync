@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
-using S3FileManager.Models;
-using S3FileManager.Services;
+using AWSS3Sync.Models;
+using AWSS3Sync.Services;
 
-namespace S3FileManager.Tests
+namespace AWSS3Sync.Tests
 {
     /// <summary>
     /// Basic tests for the unified authentication system

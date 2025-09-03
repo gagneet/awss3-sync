@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
 
-namespace S3FileManager.Services
+namespace AWSS3Sync.Services
 {
     /// <summary>
     /// Unified authentication service that consolidates Cognito and local authentication

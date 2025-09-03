@@ -1,6 +1,6 @@
 using System;
 
-namespace S3FileManager.Models
+namespace AWSS3Sync.Models
 {
     /// <summary>
     /// Result of unified authentication attempt

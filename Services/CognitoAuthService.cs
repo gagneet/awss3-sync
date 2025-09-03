@@ -14,11 +14,11 @@ using Amazon.CognitoIdentityProvider.Model;
 using Amazon.Extensions.CognitoAuthentication;
 using Amazon.Runtime;
 using Newtonsoft.Json;
-using S3FileManager.Models;
-using CognitoUserModel = S3FileManager.Models.CognitoUser;
+using AWSS3Sync.Models;
+using CognitoUserModel = AWSS3Sync.Models.CognitoUser;
 using AmazonCognitoUser = Amazon.Extensions.CognitoAuthentication.CognitoUser;
 
-namespace S3FileManager.Services
+namespace AWSS3Sync.Services
 {
     /// <summary>
     /// Service for handling AWS Cognito authentication with offline capabilities
@@ -299,7 +299,7 @@ namespace S3FileManager.Services
                 // Log error but don't fail authentication
                 try
                 {
-                    EventLog.WriteEntry("S3FileManager", $"Failed to get AWS credentials: {ex.Message}", EventLogEntryType.Error);
+                    EventLog.WriteEntry("AWSS3Sync", $"Failed to get AWS credentials: {ex.Message}", EventLogEntryType.Error);
                 }
                 catch
                 {

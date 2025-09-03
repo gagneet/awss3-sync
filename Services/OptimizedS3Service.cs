@@ -11,10 +11,10 @@ using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
-using S3FileManager.Models;
-using CognitoUserModel = S3FileManager.Models.CognitoUser;
+using AWSS3Sync.Models;
+using CognitoUserModel = AWSS3Sync.Models.CognitoUser;
 
-namespace S3FileManager.Services
+namespace AWSS3Sync.Services
 {
     /// <summary>
     /// Optimized S3 service with improved performance for uploads, downloads, and sync operations

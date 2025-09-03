@@ -2,10 +2,10 @@
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using S3FileManager.Models;
-using S3FileManager.Services;
+using AWSS3Sync.Models;
+using AWSS3Sync.Services;
 
-namespace S3FileManager.Forms
+namespace AWSS3Sync.Forms
 {
     public partial class CognitoLoginForm : Form
     {

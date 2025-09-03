@@ -402,7 +402,7 @@ Enable detailed logging by adding to appsettings.json:
   "Logging": {
     "LogLevel": {
       "Default": "Information",
-      "S3FileManager": "Debug",
+      "AWSS3Sync": "Debug",
       "Amazon": "Warning"
     }
   }

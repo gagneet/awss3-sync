@@ -127,7 +127,7 @@ namespace AWSS3Sync
             {
                 try
                 {
-                    await S3FileManager.Tests.UnifiedAuthTests.RunBasicTests();
+                    await AWSS3Sync.Tests.UnifiedAuthTests.RunBasicTests();
                     return true;
                 }
                 catch (Exception ex)
