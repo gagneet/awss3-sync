@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using S3FileManager.Models;
+using AWSS3Sync.Models;
 
-namespace S3FileManager.Models
+namespace AWSS3Sync.Models
 {
     /// <summary>
     /// Represents a user authenticated through AWS Cognito with offline capabilities
