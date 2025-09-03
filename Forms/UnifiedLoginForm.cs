@@ -16,11 +16,9 @@ namespace AWSS3Sync.Forms
         private TextBox? _usernameTextBox;
         private TextBox? _passwordTextBox;
         private CheckBox? _offlineModeCheckBox;
-        private CheckBox? _rememberMeCheckBox;
         private Button? _loginButton;
         private Label? _statusLabel;
         private ProgressBar? _progressBar;
-        private Panel? _authMethodPanel;
         private RadioButton? _automaticModeRadio;
         private RadioButton? _cognitoOnlyRadio;
         private RadioButton? _localOnlyRadio;

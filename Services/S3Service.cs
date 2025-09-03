@@ -82,13 +82,13 @@ namespace AWSS3Sync.Services
             // Add "sub-folders"
             foreach (var commonPrefix in response.CommonPrefixes)
             {
-                if (commonPrefix.Prefix != null)
+                if (commonPrefix != null)
                 {
-                    var parts = commonPrefix.Prefix.TrimEnd('/').Split('/');
+                    var parts = commonPrefix.TrimEnd('/').Split('/');
                     var name = parts.LastOrDefault();
                     if (!string.IsNullOrEmpty(name))
                     {
-                        nodes.Add(new FileNode(name, commonPrefix.Prefix, true, 0, DateTime.MinValue, new List<UserRole>()));
+                        nodes.Add(new FileNode(name, commonPrefix, true, 0, DateTime.MinValue, new List<UserRole>()));
                     }
                 }
             }
@@ -115,49 +115,6 @@ namespace AWSS3Sync.Services
             return nodes.OrderBy(n => n.IsDirectory ? 0 : 1).ThenBy(n => n.Name).ToList();
         }
 
-        private List<FileNode> BuildS3Hierarchy(List<S3FileItem> s3Files)
-        {
-            var fileNodes = new Dictionary<string, FileNode>();
-            var rootNodes = new List<FileNode>();
-
-            foreach (var s3File in s3Files.OrderBy(f => f.Key))
-            {
-                var parts = s3File.Key.TrimEnd('/').Split('/');
-                FileNode parent = null;
-                string currentPath = "";
-
-                for (int i = 0; i < parts.Length; i++)
-                {
-                    string part = parts[i];
-                    currentPath += part;
-                    bool isDir = i < parts.Length - 1 || s3File.Key.EndsWith("/");
-                    if (isDir)
-                    {
-                        currentPath += "/";
-                    }
-
-                    if (!fileNodes.TryGetValue(currentPath, out var node))
-                    {
-                        node = new FileNode(part, currentPath, isDir, isDir ? 0 : s3File.Size, s3File.LastModified, s3File.AccessRoles);
-                        fileNodes.Add(currentPath, node);
-
-                        if (parent != null)
-                        {
-                            if (!parent.Children.Any(c => c.Path == node.Path))
-                                parent.Children.Add(node);
-                        }
-                        else
-                        {
-                            if (!rootNodes.Any(r => r.Path == node.Path))
-                                rootNodes.Add(node);
-                        }
-                    }
-                    parent = node;
-                }
-            }
-            return rootNodes;
-        }
-
         private async Task<List<S3FileItem>> GetFlatS3FileList(UserRole userRole)
         {
             var files = new List<S3FileItem>();
@@ -170,7 +127,7 @@ namespace AWSS3Sync.Services
                 // Add "sub-folders"
                 foreach (var commonPrefix in response.CommonPrefixes)
                 {
-                    files.Add(new S3FileItem { Key = commonPrefix.Prefix, Size = 0, LastModified = DateTime.MinValue, AccessRoles = new List<UserRole>() });
+                    files.Add(new S3FileItem { Key = commonPrefix, Size = 0, LastModified = DateTime.MinValue, AccessRoles = new List<UserRole>() });
                 }
 
                 // Add files

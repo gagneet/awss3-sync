@@ -10,7 +10,7 @@ namespace AWSS3Sync.Tests
     /// </summary>
     public class UnifiedAuthTests
     {
-        public static async Task RunBasicTests()
+        public static void RunBasicTests()
         {
             Console.WriteLine("Starting Unified Authentication System Tests...\n");
 
@@ -21,7 +21,7 @@ namespace AWSS3Sync.Tests
             TestAuthenticationResults();
 
             // Test 3: UnifiedAuthService initialization
-            await TestUnifiedAuthServiceInitialization();
+            TestUnifiedAuthServiceInitialization();
 
             Console.WriteLine("\nAll tests completed!");
         }
@@ -70,7 +70,7 @@ namespace AWSS3Sync.Tests
             Console.WriteLine();
         }
 
-        private static async Task TestUnifiedAuthServiceInitialization()
+        private static void TestUnifiedAuthServiceInitialization()
         {
             Console.WriteLine("Test 3: UnifiedAuthService initialization");
 

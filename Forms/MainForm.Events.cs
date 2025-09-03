@@ -21,19 +21,25 @@ namespace AWSS3Sync
             var previewPictureBox = this.Controls.Find("previewPictureBox", true).FirstOrDefault() as PictureBox;
 
             // Reset preview controls
-            previewInfoLabel.Visible = true;
-            previewTextBox.Visible = false;
-            previewPictureBox.Visible = false;
-            previewTextBox.Clear();
-            if (previewPictureBox.Image != null)
+            if (previewInfoLabel != null) previewInfoLabel.Visible = true;
+            if (previewTextBox != null)
             {
-                previewPictureBox.Image.Dispose();
-                previewPictureBox.Image = null;
+                previewTextBox.Visible = false;
+                previewTextBox.Clear();
+            }
+            if (previewPictureBox != null)
+            {
+                previewPictureBox.Visible = false;
+                if (previewPictureBox.Image != null)
+                {
+                    previewPictureBox.Image.Dispose();
+                    previewPictureBox.Image = null;
+                }
             }
 
             if (fileNode.IsDirectory)
             {
-                previewInfoLabel.Text = $"Directory: {fileNode.Name}";
+                if (previewInfoLabel != null) previewInfoLabel.Text = $"Directory: {fileNode.Name}";
                 return;
             }
 
@@ -437,7 +443,7 @@ namespace AWSS3Sync
             MessageBox.Show("Sync functionality is not fully implemented due to missing UI components (SyncDirectionForm).", "Not Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private async void ListS3Button_Click(object sender, EventArgs e)
+        private async void ListS3Button_Click(object? sender, EventArgs e)
         {
             await LoadS3FilesAsync();
         }
