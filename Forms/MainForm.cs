@@ -26,7 +26,8 @@ namespace AWSS3Sync
         // Performance optimization: Cache and selection tracking
         private readonly Dictionary<string, bool> _s3CheckedItems = new Dictionary<string, bool>();
         private readonly Dictionary<string, bool> _localCheckedItems = new Dictionary<string, bool>();
-
+        private bool _isUpdatingTree = false;
+		
         // UI controls that need to be accessed across methods
         private Label previewInfoLabel = null!;
         private RichTextBox previewTextBox = null!;
@@ -231,6 +232,14 @@ namespace AWSS3Sync
             s3TreeView.ContextMenuStrip = s3ContextMenu;
 
             var buttonY = 530;
+            var listButton = new Button
+            {
+                Text = "List S3 Files",
+                Location = new Point(10, buttonY),
+                Size = new Size(100, 30)
+            };
+            listButton.Click += ListS3Button_Click;
+
             var downloadButton = new Button
             {
                 Text = "Download Selected",
@@ -314,7 +323,7 @@ namespace AWSS3Sync
             panel.Controls.AddRange(new Control[]
             {
                 headerLabel, bucketLabel, s3TreeView,
-                downloadButton, deleteButton, permissionsButton, refreshButton, reviewPermissionsButton,
+                listButton, downloadButton, deleteButton, permissionsButton, refreshButton, reviewPermissionsButton,
                 selectionLabel, searchLabel, searchTextBox, clearSearchButton
             });
 

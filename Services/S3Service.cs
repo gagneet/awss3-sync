@@ -15,26 +15,117 @@ namespace AWSS3Sync.Services
         private readonly AmazonS3Client _s3Client;
         private readonly string _bucketName;
         private readonly MetadataService _metadataService;
+        private readonly bool _hasValidCredentials;
 
-        public S3Service()
+        public S3Service(UnifiedUser? user = null)
         {
             var config = ConfigurationService.GetConfiguration();
             var awsConfig = new AmazonS3Config { RegionEndpoint = RegionEndpoint.GetBySystemName(config.AWS.Region) };
-            _s3Client = new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
+            
+            // Use user's AWS credentials if available, otherwise fall back to config
+            if (user?.HasAwsCredentials == true)
+            {
+                if (!string.IsNullOrEmpty(user.AwsSessionToken))
+                {
+                    // Use temporary credentials from Cognito
+                    var credentials = new Amazon.Runtime.SessionAWSCredentials(
+                        user.AwsAccessKeyId!,
+                        user.AwsSecretAccessKey!,
+                        user.AwsSessionToken);
+                    _s3Client = new AmazonS3Client(credentials, awsConfig);
+                }
+                else
+                {
+                    // Use permanent credentials
+                    _s3Client = new AmazonS3Client(user.AwsAccessKeyId, user.AwsSecretAccessKey, awsConfig);
+                }
+                _hasValidCredentials = true;
+            }
+            else
+            {
+                // Fall back to config-based credentials (legacy support)
+                _s3Client = new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, awsConfig);
+                _hasValidCredentials = !string.IsNullOrEmpty(config.AWS.AccessKey) && !string.IsNullOrEmpty(config.AWS.SecretKey);
+            }
+            
             _bucketName = config.AWS.BucketName;
             _metadataService = new MetadataService(_s3Client, _bucketName);
+        }
+        
+        /// <summary>
+        /// Validate that the service has proper AWS credentials
+        /// </summary>
+        private void ValidateCredentials(string operation = "S3 operation")
+        {
+            if (!_hasValidCredentials)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot perform {operation}: No valid AWS credentials available. " +
+                    "Please authenticate with AWS Cognito or configure AWS credentials.");
+            }
         }
 
         public async Task<List<FileNode>> ListFilesAsync(UserRole userRole, string prefix = "")
         {
+            // ValidateCredentials("list S3 files");
+            // var flatList = await GetFlatS3FileList(userRole);
+            // return BuildS3Hierarchy(flatList);
             var nodes = new List<FileNode>();
             var request = new ListObjectsV2Request
             {
                 BucketName = _bucketName,
                 Prefix = prefix,
                 Delimiter = "/"
-            };
+            };			
+        }
 
+        private List<FileNode> BuildS3Hierarchy(List<S3FileItem> s3Files)
+        {
+            var fileNodes = new Dictionary<string, FileNode>();
+            var rootNodes = new List<FileNode>();
+
+            foreach (var s3File in s3Files.OrderBy(f => f.Key))
+            {
+                var parts = s3File.Key.TrimEnd('/').Split('/');
+                FileNode parent = null;
+                string currentPath = "";
+
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    string part = parts[i];
+                    currentPath += part;
+                    bool isDir = i < parts.Length - 1 || s3File.Key.EndsWith("/");
+                    if (isDir)
+                    {
+                        currentPath += "/";
+                    }
+
+                    if (!fileNodes.TryGetValue(currentPath, out var node))
+                    {
+                        node = new FileNode(part, currentPath, isDir, isDir ? 0 : s3File.Size, s3File.LastModified, s3File.AccessRoles);
+                        fileNodes.Add(currentPath, node);
+
+                        if (parent != null)
+                        {
+                            if (!parent.Children.Any(c => c.Path == node.Path))
+                                parent.Children.Add(node);
+                        }
+                        else
+                        {
+                            if (!rootNodes.Any(r => r.Path == node.Path))
+                                rootNodes.Add(node);
+                        }
+                    }
+                    parent = node;
+                }
+            }
+            return rootNodes;
+        }
+
+        private async Task<List<S3FileItem>> GetFlatS3FileList(UserRole userRole)
+        {
+            var files = new List<S3FileItem>();
+            var request = new ListObjectsV2Request { BucketName = _bucketName, MaxKeys = 1000 };
             ListObjectsV2Response response;
             do
             {
@@ -67,6 +158,7 @@ namespace AWSS3Sync.Services
 
                     if (CanUserAccessFile(userRole, item))
                     {
+                        // files.Add(item);					
                         var parts = obj.Key.TrimEnd('/').Split('/');
                         var name = parts.LastOrDefault();
                         if (!string.IsNullOrEmpty(name))
@@ -80,6 +172,8 @@ namespace AWSS3Sync.Services
             } while (response.IsTruncated.GetValueOrDefault());
 
             return nodes.OrderBy(n => n.IsDirectory ? 0 : 1).ThenBy(n => n.Name).ToList();
+            // files = files.Where(f => !f.Key.StartsWith("logs/", StringComparison.OrdinalIgnoreCase)).ToList();
+            // return FilterFilesForRole(files, userRole);
         }
 
         private bool CanUserAccessFile(UserRole userRole, S3FileItem item)
@@ -170,6 +264,7 @@ namespace AWSS3Sync.Services
 
         public async Task<bool> UploadFileAsync(string filePath, string key, List<UserRole> accessRoles)
         {
+            ValidateCredentials("upload file to S3");
             var localFileInfo = new FileInfo(filePath);
             var localFileLastWriteTimeUtc = localFileInfo.LastWriteTimeUtc;
             var localFileSize = localFileInfo.Length;
@@ -203,6 +298,7 @@ namespace AWSS3Sync.Services
 
         public async Task UploadDirectoryAsync(string directoryPath, string keyPrefix, List<UserRole> accessRoles)
         {
+            ValidateCredentials("upload directory to S3");
             string cleanKeyPrefix = keyPrefix.Trim('/');
 
             try
@@ -231,6 +327,7 @@ namespace AWSS3Sync.Services
 
         public async Task<string> DownloadFileAsync(string s3Key, string localDirectory, string? versionId = null)
         {
+            ValidateCredentials("download file from S3");
             string fileName = Path.GetFileName(s3Key);
             if (string.IsNullOrEmpty(fileName))
             {
@@ -261,6 +358,7 @@ namespace AWSS3Sync.Services
 
         public async Task DeleteFileAsync(string s3Key, UserRole userRole)
         {
+            ValidateCredentials("delete file from S3");
             if (userRole != UserRole.Administrator)
             {
                 throw new InvalidOperationException("Only administrators can delete files.");

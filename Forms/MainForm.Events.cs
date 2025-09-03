@@ -16,6 +16,10 @@ namespace AWSS3Sync
             var fileNode = e.Node?.Tag as FileNode;
             if (fileNode == null) return;
 
+            var previewInfoLabel = this.Controls.Find("previewInfoLabel", true).FirstOrDefault() as Label;
+            var previewTextBox = this.Controls.Find("previewTextBox", true).FirstOrDefault() as RichTextBox;
+            var previewPictureBox = this.Controls.Find("previewPictureBox", true).FirstOrDefault() as PictureBox;
+
             // Reset preview controls
             previewInfoLabel.Visible = true;
             previewTextBox.Visible = false;
@@ -273,6 +277,7 @@ namespace AWSS3Sync
                     return;
                 }
 
+            // Simplified for now, will need to be updated with role logic
                 var roles = new List<UserRole> { _currentUser.Role };
                 foreach (var item in selectedItems)
                 {
@@ -430,6 +435,11 @@ namespace AWSS3Sync
             //     return;
 
             MessageBox.Show("Sync functionality is not fully implemented due to missing UI components (SyncDirectionForm).", "Not Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private async void ListS3Button_Click(object sender, EventArgs e)
+        {
+            await LoadS3FilesAsync();
         }
 
         private async void RefreshS3Button_Click(object? sender, EventArgs e)
