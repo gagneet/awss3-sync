@@ -16,15 +16,15 @@ namespace AWSS3Sync
             var fileNode = e.Node?.Tag as FileNode;
             if (fileNode == null) return;
 
-            var previewInfoLabel = this.Controls.Find("previewInfoLabel", true).FirstOrDefault() as Label;
-            var previewTextBox = this.Controls.Find("previewTextBox", true).FirstOrDefault() as RichTextBox;
-            var previewPictureBox = this.Controls.Find("previewPictureBox", true).FirstOrDefault() as PictureBox;
+            // Use the class fields directly, which are initialized in CreatePreviewPanel()
+            // This avoids repeated, inefficient calls to Controls.Find() and makes the code cleaner.
 
             // Reset preview controls
             previewInfoLabel.Visible = true;
             previewTextBox.Visible = false;
-            previewPictureBox.Visible = false;
             previewTextBox.Clear();
+
+            previewPictureBox.Visible = false;
             if (previewPictureBox.Image != null)
             {
                 previewPictureBox.Image.Dispose();
@@ -437,7 +437,7 @@ namespace AWSS3Sync
             MessageBox.Show("Sync functionality is not fully implemented due to missing UI components (SyncDirectionForm).", "Not Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private async void ListS3Button_Click(object sender, EventArgs e)
+        private async void ListS3Button_Click(object? sender, EventArgs e)
         {
             await LoadS3FilesAsync();
         }

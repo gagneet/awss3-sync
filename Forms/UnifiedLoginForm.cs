@@ -16,10 +16,12 @@ namespace AWSS3Sync.Forms
         private TextBox? _usernameTextBox;
         private TextBox? _passwordTextBox;
         private CheckBox? _offlineModeCheckBox;
+        // Placeholder for "Remember Me" functionality, to be implemented later.
         private CheckBox? _rememberMeCheckBox;
         private Button? _loginButton;
         private Label? _statusLabel;
         private ProgressBar? _progressBar;
+        // Placeholder for a panel related to authentication methods, for future use.
         private Panel? _authMethodPanel;
         private RadioButton? _automaticModeRadio;
         private RadioButton? _cognitoOnlyRadio;
