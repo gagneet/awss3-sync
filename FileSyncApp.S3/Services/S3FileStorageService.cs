@@ -98,18 +98,24 @@ public class S3FileStorageService : IFileStorageService, IDisposable
 
             var response = await client.ListObjectsV2Async(request, cancellationToken);
 
-            foreach (var obj in response.S3Objects)
+            // Fetch metadata in parallel for all objects in this page
+            var tasks = response.S3Objects.Select(async obj =>
             {
                 var accessRoles = await metadataService.GetFileAccessRolesAsync(obj.Key);
 
-                var node = new FileNode(
+                return new FileNode(
                     Path.GetFileName(obj.Key) ?? obj.Key,
                     obj.Key,
                     obj.Key.EndsWith("/"),
                     obj.Size ?? 0,
                     obj.LastModified ?? DateTime.MinValue,
                     accessRoles);
+            });
 
+            var nodes = await Task.WhenAll(tasks);
+
+            foreach (var node in nodes)
+            {
                 if (CanUserAccessFile(userRole, node))
                 {
                     files.Add(node);
