@@ -21,6 +21,7 @@ public class CognitoAuthService : IAuthService, IDisposable
     private readonly ICredentialService _credentialService;
     private readonly ILogger<CognitoAuthService> _logger;
     private UnifiedUser? _currentUser;
+    private bool _isCognitoConfigured;
 
     public CognitoAuthService(
         IConfigurationService configService,
@@ -32,36 +33,66 @@ public class CognitoAuthService : IAuthService, IDisposable
         _credentialService = credentialService;
         _logger = logger;
 
-        if (!string.IsNullOrEmpty(_config.Region))
-        {
-            var cognitoConfig = new AmazonCognitoIdentityProviderConfig
-            {
-                RegionEndpoint = RegionEndpoint.GetBySystemName(_config.Region)
-            };
+        // Check if Cognito is properly configured
+        _isCognitoConfigured = !string.IsNullOrEmpty(_config.Region) 
+            && !string.IsNullOrEmpty(_config.UserPoolId)
+            && !string.IsNullOrEmpty(_config.ClientId);
 
-            _cognitoClient = new AmazonCognitoIdentityProviderClient(
-                new AnonymousAWSCredentials(),
-                cognitoConfig);
+        if (_isCognitoConfigured)
+        {
+            try
+            {
+                var cognitoConfig = new AmazonCognitoIdentityProviderConfig
+                {
+                    RegionEndpoint = RegionEndpoint.GetBySystemName(_config.Region)
+                };
+
+                _cognitoClient = new AmazonCognitoIdentityProviderClient(
+                    new AnonymousAWSCredentials(),
+                    cognitoConfig);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to initialize Cognito client, falling back to local auth");
+                _isCognitoConfigured = false;
+            }
+        }
+        else
+        {
+            _logger.LogInformation("Cognito not configured, using local authentication only");
         }
     }
 
     private async Task<bool> IsOfflineModeAsync()
     {
-        if (string.IsNullOrEmpty(_config.Region)) return true;
+        // If Cognito is not configured, we're effectively "offline" for Cognito purposes
+        if (!_isCognitoConfigured || string.IsNullOrEmpty(_config.Region))
+        {
+            return true;
+        }
+
         try
         {
-            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var response = await client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").ConfigureAwait(false);
-            return !response.IsSuccessStatusCode && (int)response.StatusCode >= 500;
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var response = await client.GetAsync(
+                $"https://cognito-idp.{_config.Region}.amazonaws.com", 
+                cts.Token);
+            return false;
         }
-        catch { return true; }
+        catch
+        {
+            return true;
+        }
     }
 
     public async Task<UnifiedUser?> AuthenticateAsync(string username, string password, bool forceOnline = false)
     {
-        if (_cognitoClient == null)
+        // If Cognito is not configured, return null to fall back to local auth
+        if (!_isCognitoConfigured || _cognitoClient == null)
         {
-            throw new InvalidOperationException("AWS Cognito is not configured. Please check your appsettings.json.");
+            _logger.LogInformation("Cognito not configured, authentication will use local service");
+            return null;
         }
 
         try
@@ -141,7 +172,7 @@ public class CognitoAuthService : IAuthService, IDisposable
 
     public async Task<bool> RefreshTokensAsync()
     {
-        if (_cognitoClient == null) return false;
+        if (_cognitoClient == null || !_isCognitoConfigured) return false;
 
         if (_currentUser == null || string.IsNullOrEmpty(_currentUser.RefreshToken))
         {
@@ -222,7 +253,6 @@ public class CognitoAuthService : IAuthService, IDisposable
             user.AwsAccessKeyId = getCredentialsResponse.Credentials.AccessKeyId;
             user.AwsSecretAccessKey = getCredentialsResponse.Credentials.SecretKey;
             user.AwsSessionToken = getCredentialsResponse.Credentials.SessionToken;
-            // Removed direct assignment to read-only property HasAwsCredentials
         }
         catch (Exception ex)
         {

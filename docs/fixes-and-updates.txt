@@ -1,0 +1,36 @@
+Looking at the code, I can identify several issues causing the application to hang. The main problems are:
+
+1. **Synchronous network call in `IsOfflineMode()`** - The `CognitoAuthService.IsOfflineMode()` method makes a blocking HTTP call using `.Result` which hangs the UI thread
+2. **Missing Cognito configuration causes issues** - When Cognito settings are empty/missing, the service still tries to initialize and make network calls
+3. **Lazy loading S3 TreeView triggers async operations on UI thread** - The `S3TreeView_BeforeExpand` event doesn't handle the async properly
+
+Let me examine the specific issues and provide fixes:Based on my analysis of the code in the documents, I've identified the root causes of the hang. Here are the issues and fixes:
+
+## Root Cause Analysis
+
+### Issue 1: `IsOfflineMode()` blocks the UI thread
+In `CognitoAuthService.cs` (document 27), the method uses `.Result` which blocks:
+```csharp
+private bool IsOfflineMode()
+{
+    try
+    {
+        using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var result = client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").Result; // BLOCKS!
+        return false;
+    }
+    catch { return true; }
+}
+```
+
+### Issue 2: Missing Cognito region causes network hang
+When you don't have Cognito configured in `appsettings.json`, `_config.Region` is empty, causing the HTTP request to malformed URL and potentially hanging.
+
+### Issue 3: S3 TreeView expand is synchronous
+In `MainForm.cs` (document 36), `S3TreeView_BeforeExpand` is `async void` but doesn't properly await:
+
+```csharp
+private async void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
+```
+
+## Solutions

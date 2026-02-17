@@ -20,6 +20,7 @@ public class S3FileStorageService : IFileStorageService, IDisposable
     private readonly SemaphoreSlim _transferSemaphore;
     private long _maxBytesPerSecond;
     private string _lastAccessKey = string.Empty;
+    private bool _isInitialized = false;
 
     public S3FileStorageService(
         IAuthService authService,
@@ -47,9 +48,14 @@ public class S3FileStorageService : IFileStorageService, IDisposable
             throw new InvalidOperationException("BucketName is not configured in appsettings.json. Please set AWS:BucketName.");
         }
 
+        if (string.IsNullOrEmpty(config.AWS.Region))
+        {
+            throw new InvalidOperationException("Region is not configured in appsettings.json. Please set AWS:Region.");
+        }
+
         string currentAccessKey = user?.AwsAccessKeyId ?? config.AWS.AccessKey;
 
-        if (_s3Client != null && _lastAccessKey == currentAccessKey)
+        if (_s3Client != null && _lastAccessKey == currentAccessKey && _isInitialized)
         {
             return _s3Client;
         }
@@ -57,22 +63,35 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         _s3Client?.Dispose();
         _transferUtility?.Dispose();
 
+        var s3Config = new AmazonS3Config
+        {
+            RegionEndpoint = RegionEndpoint.GetBySystemName(config.AWS.Region),
+            Timeout = TimeSpan.FromSeconds(30),
+            MaxErrorRetry = 3
+        };
+
         if (user != null && user.HasAwsCredentials)
         {
             var credentials = new Amazon.Runtime.SessionAWSCredentials(
                 user.AwsAccessKeyId,
                 user.AwsSecretAccessKey,
                 user.AwsSessionToken);
-            _s3Client = new AmazonS3Client(credentials, RegionEndpoint.GetBySystemName(config.AWS.Region));
+            _s3Client = new AmazonS3Client(credentials, s3Config);
+            _logger.LogInformation("S3 client initialized with user session credentials");
+        }
+        else if (!string.IsNullOrEmpty(config.AWS.AccessKey) && !string.IsNullOrEmpty(config.AWS.SecretKey))
+        {
+            _s3Client = new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey, s3Config);
+            _logger.LogInformation("S3 client initialized with config credentials");
         }
         else
         {
-            _s3Client = new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey,
-                RegionEndpoint.GetBySystemName(config.AWS.Region));
+            throw new InvalidOperationException("No AWS credentials available. Please configure AWS:AccessKey and AWS:SecretKey in appsettings.json or authenticate with Cognito.");
         }
 
         _transferUtility = new TransferUtility(_s3Client);
         _lastAccessKey = currentAccessKey;
+        _isInitialized = true;
 
         return _s3Client;
     }
@@ -82,50 +101,96 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         var client = GetClient();
         var config = _configService.GetConfiguration();
         var bucketName = config.AWS.BucketName;
-        var metadataService = new S3MetadataService(client, bucketName, _metadataLogger);
+
+        _logger.LogInformation("Listing files in bucket {Bucket} with prefix '{Prefix}'", bucketName, prefix);
 
         var files = new List<FileNode>();
         string? continuationToken = null;
 
-        do
+        // Create a timeout for the entire operation
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        try
         {
-            var request = new ListObjectsV2Request
+            do
             {
-                BucketName = bucketName,
-                Prefix = prefix,
-                ContinuationToken = continuationToken
-            };
-
-            var response = await client.ListObjectsV2Async(request, cancellationToken);
-
-            // Fetch metadata in parallel for all objects in this page
-            var tasks = response.S3Objects.Select(async obj =>
-            {
-                var accessRoles = await metadataService.GetFileAccessRolesAsync(obj.Key);
-
-                return new FileNode(
-                    Path.GetFileName(obj.Key) ?? obj.Key,
-                    obj.Key,
-                    obj.Key.EndsWith("/"),
-                    obj.Size ?? 0,
-                    obj.LastModified ?? DateTime.MinValue,
-                    accessRoles);
-            });
-
-            var nodes = await Task.WhenAll(tasks);
-
-            foreach (var node in nodes)
-            {
-                if (CanUserAccessFile(userRole, node))
+                var request = new ListObjectsV2Request
                 {
+                    BucketName = bucketName,
+                    Prefix = prefix,
+                    Delimiter = "/", // Only get immediate children, not recursive
+                    ContinuationToken = continuationToken,
+                    MaxKeys = 200 // Limit batch size for responsiveness
+                };
+
+                var response = await client.ListObjectsV2Async(request, linkedCts.Token);
+
+                // Add directories (common prefixes)
+                foreach (var commonPrefix in response.CommonPrefixes)
+                {
+                    if (string.IsNullOrEmpty(commonPrefix)) continue;
+                    
+                    var dirName = commonPrefix.TrimEnd('/');
+                    if (dirName.Contains('/'))
+                        dirName = dirName.Substring(dirName.LastIndexOf('/') + 1);
+
+                    var node = new FileNode(
+                        dirName,
+                        commonPrefix,
+                        true,
+                        0,
+                        DateTime.MinValue,
+                        new List<UserRole> { UserRole.Administrator, UserRole.Executive, UserRole.User });
+                    
                     files.Add(node);
                 }
-            }
 
-            continuationToken = response.NextContinuationToken;
-        } while (!string.IsNullOrEmpty(continuationToken) && !cancellationToken.IsCancellationRequested);
+                // Add files
+                foreach (var obj in response.S3Objects)
+                {
+                    // Skip the prefix itself if it appears as an object
+                    if (obj.Key == prefix || obj.Key.EndsWith("/")) continue;
 
-        return files;
+                    var fileName = Path.GetFileName(obj.Key);
+                    if (string.IsNullOrEmpty(fileName)) continue;
+
+                    // For performance, don't fetch metadata for each file during listing
+                    // Just use default access roles
+                    var accessRoles = new List<UserRole> { UserRole.Administrator, UserRole.Executive, UserRole.User };
+
+                    var node = new FileNode(
+                        fileName,
+                        obj.Key,
+                        false,
+                        obj.Size ?? 0,
+                        obj.LastModified ?? DateTime.MinValue,
+                        accessRoles);
+
+                    if (CanUserAccessFile(userRole, node))
+                    {
+                        files.Add(node);
+                    }
+                }
+
+                continuationToken = response.NextContinuationToken;
+                
+                // Yield control periodically for UI responsiveness
+                if (!string.IsNullOrEmpty(continuationToken))
+                {
+                    await Task.Yield();
+                }
+
+            } while (!string.IsNullOrEmpty(continuationToken) && !linkedCts.Token.IsCancellationRequested);
+
+            _logger.LogInformation("Listed {Count} files from S3", files.Count);
+            return files;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            _logger.LogWarning("S3 listing timed out after 60 seconds");
+            throw new TimeoutException("S3 listing operation timed out. Please check your network connection.");
+        }
     }
 
     public async Task<bool> UploadFileAsync(string filePath, string key, List<UserRole> accessRoles, IProgress<double>? progress = null, CancellationToken cancellationToken = default)

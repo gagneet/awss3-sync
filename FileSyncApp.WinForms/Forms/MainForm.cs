@@ -23,13 +23,17 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private KryptonButton _btnSync = null!;
     private KryptonButton _btnRefresh = null!;
 
+    // Flag to prevent re-entrant calls during async operations
+    private bool _isLoadingS3 = false;
+    private bool _isLoadingLocal = false;
+
     public event EventHandler? SyncRequested;
     public event EventHandler? CancelRequested;
     public event EventHandler? RefreshRequested;
 
-    public string StatusMessage { set => _statusLabel.Text = value; }
-    public int ProgressValue { set => _progressBar.Value = value; }
-    public bool ProgressVisible { set => _progressBar.Visible = value; }
+    public string StatusMessage { set => SafeSetStatus(value); }
+    public int ProgressValue { set => SafeSetProgress(value); }
+    public bool ProgressVisible { set => SafeSetProgressVisible(value); }
 
     public MainForm(IAuthService authService, IFileStorageService s3Service, IConfigurationService configService)
     {
@@ -42,13 +46,37 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _ = CancelRequested;
     }
 
+    private void SafeSetStatus(string value)
+    {
+        if (_statusLabel.InvokeRequired)
+            _statusLabel.Invoke(() => _statusLabel.Text = value);
+        else
+            _statusLabel.Text = value;
+    }
+
+    private void SafeSetProgress(int value)
+    {
+        if (_progressBar.InvokeRequired)
+            _progressBar.Invoke(() => _progressBar.Value = Math.Min(value, 100));
+        else
+            _progressBar.Value = Math.Min(value, 100);
+    }
+
+    private void SafeSetProgressVisible(bool value)
+    {
+        if (_progressBar.InvokeRequired)
+            _progressBar.Invoke(() => _progressBar.Visible = value);
+        else
+            _progressBar.Visible = value;
+    }
+
     private void InitializeComponent()
     {
         this.Text = "FileSyncApp - Strata S3 Manager";
-        this.Width = 1300; // Increased width as requested
-        this.Height = 850; // Increased height
+        this.Width = 1300;
+        this.Height = 850;
         this.StartPosition = FormStartPosition.CenterScreen;
-        this.WindowState = FormWindowState.Maximized; // Start maximized
+        this.WindowState = FormWindowState.Maximized;
 
         var mainPanel = new KryptonPanel { Dock = DockStyle.Fill };
 
@@ -65,7 +93,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
-            SplitterDistance = 600 // More space for S3 window by default
+            SplitterDistance = 600
         };
 
         var localGroup = new KryptonGroupBox { Text = "Local Filesystem", Dock = DockStyle.Fill };
@@ -109,81 +137,159 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _s3TreeView.Nodes.Add(s3Root);
     }
 
-    private async void LocalTreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
+    private void LocalTreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
     {
+        if (_isLoadingLocal) return;
+        
         if (e.Node?.Nodes.Count == 1 && e.Node.Nodes[0].Text == "Loading...")
         {
+            _isLoadingLocal = true;
             e.Node.Nodes.Clear();
             var dirInfo = e.Node.Tag as DirectoryInfo;
             if (dirInfo == null && e.Node.Tag is string path) dirInfo = new DirectoryInfo(path);
-            if (dirInfo == null) return;
+            if (dirInfo == null)
+            {
+                _isLoadingLocal = false;
+                return;
+            }
 
+            // Load synchronously but quickly for local filesystem
             try
             {
-                var subDirs = await Task.Run(() => dirInfo.EnumerateDirectories().ToList());
-                var files = await Task.Run(() => dirInfo.EnumerateFiles().ToList());
-
                 _localTreeView.BeginUpdate();
+                
+                var subDirs = dirInfo.EnumerateDirectories()
+                    .Take(500) // Limit to prevent hanging on huge directories
+                    .ToList();
+                var files = dirInfo.EnumerateFiles()
+                    .Take(500)
+                    .ToList();
+
                 foreach (var dir in subDirs)
                 {
-                    var node = new KryptonTreeNode($"📁 {dir.Name}") { Tag = dir };
-                    node.Nodes.Add(new KryptonTreeNode("Loading..."));
-                    e.Node.Nodes.Add(node);
+                    try
+                    {
+                        var node = new KryptonTreeNode($"📁 {dir.Name}") { Tag = dir };
+                        // Only add loading placeholder if directory likely has contents
+                        try
+                        {
+                            if (dir.EnumerateFileSystemInfos().Any())
+                                node.Nodes.Add(new KryptonTreeNode("Loading..."));
+                        }
+                        catch { } // Ignore access errors for placeholder check
+                        e.Node.Nodes.Add(node);
+                    }
+                    catch (UnauthorizedAccessException) { }
                 }
 
                 foreach (var file in files)
                 {
                     e.Node.Nodes.Add(new KryptonTreeNode($"📄 {file.Name}") { Tag = file });
                 }
+                
                 _localTreeView.EndUpdate();
             }
-            catch (UnauthorizedAccessException) { }
+            catch (UnauthorizedAccessException)
+            {
+                e.Node.Nodes.Add(new KryptonTreeNode("Access Denied"));
+            }
             catch (Exception ex)
             {
                 StatusMessage = $"Error: {ex.Message}";
+            }
+            finally
+            {
+                _isLoadingLocal = false;
             }
         }
     }
 
     private async void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
     {
+        if (_isLoadingS3) return;
+        
         if (e.Node?.Nodes.Count == 1 && e.Node.Nodes[0].Text == "Loading...")
         {
+            _isLoadingS3 = true;
             e.Node.Nodes.Clear();
             var prefix = e.Node.Tag as string ?? "";
 
             try
             {
+                StatusMessage = "Loading S3 contents...";
+                
                 var currentUser = _authService.GetCurrentUser();
-                if (currentUser == null) return;
-
-                var items = await _s3Service.ListFilesAsync(currentUser.Role, prefix);
-
-                _s3TreeView.BeginUpdate();
-                foreach (var item in items)
+                if (currentUser == null)
                 {
-                    var displayText = (item.IsDirectory ? "📁 " : "📄 ") + item.Name;
-                    var node = new KryptonTreeNode(displayText) { Tag = item.Path };
-                    if (item.IsDirectory)
-                    {
-                        node.Nodes.Add(new KryptonTreeNode("Loading..."));
-                    }
-                    e.Node.Nodes.Add(node);
+                    e.Node.Nodes.Add(new KryptonTreeNode("Not authenticated"));
+                    return;
                 }
-                _s3TreeView.EndUpdate();
+
+                // Run S3 listing on background thread
+                var items = await Task.Run(async () => 
+                {
+                    try
+                    {
+                        return await _s3Service.ListFilesAsync(currentUser.Role, prefix);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new Exception($"S3 Error: {ex.Message}", ex);
+                    }
+                });
+
+                // Update UI on main thread
+                _s3TreeView.BeginUpdate();
+                try
+                {
+                    foreach (var item in items.Take(500)) // Limit items for performance
+                    {
+                        var displayText = (item.IsDirectory ? "📁 " : "📄 ") + item.Name;
+                        var node = new KryptonTreeNode(displayText) { Tag = item.Path };
+                        if (item.IsDirectory)
+                        {
+                            node.Nodes.Add(new KryptonTreeNode("Loading..."));
+                        }
+                        e.Node.Nodes.Add(node);
+                    }
+                }
+                finally
+                {
+                    _s3TreeView.EndUpdate();
+                }
+                
+                StatusMessage = $"Loaded {items.Count} items";
             }
             catch (Exception ex)
             {
                 var bucket = _configService.GetConfiguration().AWS.BucketName;
                 StatusMessage = $"Error: {ex.Message}";
-                MessageBox.Show($"Failed to list S3 contents. Bucket: '{bucket}'.\n\nError: {ex.Message}", "S3 Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                e.Node.Nodes.Add(new KryptonTreeNode($"Error: {ex.Message}"));
+                
+                // Show error dialog on first failure
+                MessageBox.Show(
+                    $"Failed to list S3 contents.\nBucket: '{bucket}'\n\nError: {ex.Message}", 
+                    "S3 Error", 
+                    MessageBoxButtons.OK, 
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                _isLoadingS3 = false;
             }
         }
     }
 
     public void UpdateLocalTree(List<FileNode> nodes)
     {
-        InitializeTrees();
+        if (InvokeRequired)
+        {
+            Invoke(() => InitializeTrees());
+        }
+        else
+        {
+            InitializeTrees();
+        }
     }
 
     public void UpdateRemoteTree(List<FileNode> nodes)
