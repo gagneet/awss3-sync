@@ -83,7 +83,7 @@ public class CognitoAuthService : IAuthService, IDisposable
                     Groups = groups,
                     Role = MapGroupsToRole(groups),
                     LastLogin = DateTime.UtcNow,
-                    TokenExpiry = DateTime.UtcNow.AddSeconds((double)authResponse.AuthenticationResult.ExpiresIn),
+                    TokenExpiry = DateTime.UtcNow.AddSeconds((double)(authResponse.AuthenticationResult.ExpiresIn ?? 3600)),
                     AccessToken = authResponse.AuthenticationResult.AccessToken,
                     IdToken = authResponse.AuthenticationResult.IdToken,
                     RefreshToken = authResponse.AuthenticationResult.RefreshToken,
@@ -115,6 +115,7 @@ public class CognitoAuthService : IAuthService, IDisposable
 
     private async Task<UnifiedUser?> AuthenticateOfflineAsync(string username, string password)
     {
+        await Task.Yield();
         return null;
     }
 
@@ -151,7 +152,7 @@ public class CognitoAuthService : IAuthService, IDisposable
             {
                 _currentUser.AccessToken = refreshResponse.AuthenticationResult.AccessToken;
                 _currentUser.IdToken = refreshResponse.AuthenticationResult.IdToken;
-                _currentUser.TokenExpiry = DateTime.UtcNow.AddSeconds((double)refreshResponse.AuthenticationResult.ExpiresIn);
+                _currentUser.TokenExpiry = DateTime.UtcNow.AddSeconds((double)(refreshResponse.AuthenticationResult.ExpiresIn ?? 3600));
                 await GetAwsCredentialsAsync(_currentUser);
                 return true;
             }
@@ -242,12 +243,12 @@ public class CognitoAuthService : IAuthService, IDisposable
         return Convert.ToBase64String(hash);
     }
 
-    private async Task<bool> IsOfflineModeAsync()
+    private bool IsOfflineMode()
     {
         try
         {
             using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var result = await client.GetAsync($"");
+            var result = client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").Result;
             return false;
         }
         catch { return true; }

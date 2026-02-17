@@ -79,7 +79,7 @@ public class DatabaseService : IDatabaseService
             result.Add(new SnapshotEntry(
                 reader.GetString(0),
                 reader.GetInt64(1),
-                DateTime.Parse(reader.GetString(2), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind),
+                DateTime.Parse(reader.GetString(2)),
                 reader.GetString(3),
                 reader.GetString(4)
             ));
