@@ -8,6 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Enrichers.Sensitive;
+using Amazon.S3;
+using Amazon;
 
 namespace FileSyncApp.WinForms;
 
@@ -24,7 +26,7 @@ static class Program
                 services.AddSingleton<IConfigurationService, ConfigurationService>();
 
                 Log.Logger = new LoggerConfiguration()
-                    .Enrich.WithSensitiveDataMasking(new SensitiveDataEnricherOptions())
+                    .Enrich.WithSensitiveDataMasking(options => {})
                     .WriteTo.File("logs/app.log", rollingInterval: RollingInterval.Day)
                     .CreateLogger();
 
@@ -33,9 +35,17 @@ static class Program
                 services.AddSingleton<ICredentialService, CredentialService>();
                 services.AddSingleton<IDatabaseService, DatabaseService>();
 
+                // AWS S3 Client
+                services.AddSingleton<IAmazonS3>(sp => {
+                    var configService = sp.GetRequiredService<IConfigurationService>();
+                    var config = configService.GetConfiguration();
+                    return new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey,
+                        RegionEndpoint.GetBySystemName(config.AWS.Region));
+                });
+
                 // Specific Auth Implementations
                 services.AddSingleton<CognitoAuthService>();
-                services.AddSingleton(sp => new LocalAuthService());
+                services.AddSingleton<LocalAuthService>();
 
                 // Unified Auth Service
                 services.AddSingleton<IAuthService>(sp =>

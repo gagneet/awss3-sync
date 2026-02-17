@@ -72,7 +72,7 @@ public class FileSyncPresenter
         }
     }
 
-    private async Task<SyncActionType> ResolveConflictAsync(SyncActionRequest req)
+    private Task<SyncActionType> ResolveConflictAsync(SyncActionRequest req)
     {
         SyncActionType result = SyncActionType.Skip;
 
@@ -88,7 +88,7 @@ public class FileSyncPresenter
             }));
         }
 
-        return await Task.FromResult(result);
+        return Task.FromResult(result);
     }
 
     private async void RefreshRemote()
