@@ -30,8 +30,8 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         _metadataService = new S3MetadataService(s3Client, _bucketName, metadataLogger);
 
         _transferUtility = new TransferUtility(_s3Client);
-        _transferSemaphore = new SemaphoreSlim(config.Performance.MaxConcurrentUploads);
-        _maxBytesPerSecond = config.Performance.MaxBytesPerSecond;
+        _transferSemaphore = new SemaphoreSlim(config.Performance?.MaxConcurrentUploads ?? 3);
+        _maxBytesPerSecond = config.Performance?.MaxBytesPerSecond ?? 0;
     }
 
     public async Task<List<FileNode>> ListFilesAsync(UserRole userRole, string prefix = "", CancellationToken cancellationToken = default)
