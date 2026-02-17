@@ -24,7 +24,7 @@ static class Program
                 services.AddSingleton<IConfigurationService, ConfigurationService>();
 
                 Log.Logger = new LoggerConfiguration()
-                    .Enrich.WithSensitiveDataMasking()
+                    .Enrich.WithSensitiveDataMasking(new SensitiveDataEnricherOptions())
                     .WriteTo.File("logs/app.log", rollingInterval: RollingInterval.Day)
                     .CreateLogger();
 

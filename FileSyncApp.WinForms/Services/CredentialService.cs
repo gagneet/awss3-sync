@@ -22,7 +22,8 @@ public sealed class CredentialService : ICredentialService
     public (string Username, string Token)? LoadRefreshToken()
     {
         var cred = CredentialManager.ReadCredential(Target);
-        return cred == null ? null : (cred.UserName, cred.Password);
+        if (cred == null || cred.UserName == null || cred.Password == null) return null;
+        return (cred.UserName, cred.Password);
     }
 
     public byte[] Protect(string plainText)
