@@ -242,12 +242,12 @@ public class CognitoAuthService : IAuthService, IDisposable
         return Convert.ToBase64String(hash);
     }
 
-    private bool IsOfflineMode()
+    private async Task<bool> IsOfflineModeAsync()
     {
         try
         {
             using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var result = client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").Result;
+            var result = await client.GetAsync($"");
             return false;
         }
         catch { return true; }
