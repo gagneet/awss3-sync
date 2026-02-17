@@ -25,7 +25,7 @@ public class S3FileStorageService : IFileStorageService, IDisposable
     {
         _s3Client = s3Client;
         var config = configService.GetConfiguration();
-        _bucketName = config.AWS.BucketName;
+        _bucketName = config.AWS?.BucketName ?? throw new InvalidOperationException("AWS configuration is missing");
         _logger = logger;
         _metadataService = new S3MetadataService(s3Client, _bucketName, metadataLogger);
 
