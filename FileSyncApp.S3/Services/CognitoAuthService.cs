@@ -45,14 +45,14 @@ public class CognitoAuthService : IAuthService, IDisposable
         }
     }
 
-    private bool IsOfflineMode()
+    private async Task<bool> IsOfflineModeAsync()
     {
         if (string.IsNullOrEmpty(_config.Region)) return true;
         try
         {
             using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var result = client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").Result;
-            return false;
+            var response = await client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").ConfigureAwait(false);
+            return !response.IsSuccessStatusCode && (int)response.StatusCode >= 500;
         }
         catch { return true; }
     }
@@ -66,7 +66,7 @@ public class CognitoAuthService : IAuthService, IDisposable
 
         try
         {
-            if (!forceOnline && IsOfflineMode())
+            if (!forceOnline && await IsOfflineModeAsync())
             {
                 return await AuthenticateOfflineAsync(username, password);
             }
@@ -222,6 +222,7 @@ public class CognitoAuthService : IAuthService, IDisposable
             user.AwsAccessKeyId = getCredentialsResponse.Credentials.AccessKeyId;
             user.AwsSecretAccessKey = getCredentialsResponse.Credentials.SecretKey;
             user.AwsSessionToken = getCredentialsResponse.Credentials.SessionToken;
+            // Removed direct assignment to read-only property HasAwsCredentials
         }
         catch (Exception ex)
         {
