@@ -8,7 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Enrichers.Sensitive;
-using Amazon;
 
 namespace FileSyncApp.WinForms;
 
@@ -25,7 +24,7 @@ static class Program
                 services.AddSingleton<IConfigurationService, ConfigurationService>();
 
                 Log.Logger = new LoggerConfiguration()
-                    .Enrich.WithSensitiveDataMasking(options => {})
+                    .Enrich.WithSensitiveDataMasking(new SensitiveDataEnricherOptions())
                     .WriteTo.File("logs/app.log", rollingInterval: RollingInterval.Day)
                     .CreateLogger();
 

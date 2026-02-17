@@ -18,7 +18,6 @@ public class S3FileStorageService : IFileStorageService, IDisposable
     private IAmazonS3? _s3Client;
     private TransferUtility? _transferUtility;
     private readonly SemaphoreSlim _transferSemaphore;
-    private string _bucketName = string.Empty;
     private long _maxBytesPerSecond;
     private string _lastAccessKey = string.Empty;
 
@@ -43,8 +42,7 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         var user = _authService.GetCurrentUser();
         var config = _configService.GetConfiguration();
 
-        _bucketName = config.AWS.BucketName;
-        if (string.IsNullOrEmpty(_bucketName))
+        if (string.IsNullOrEmpty(config.AWS.BucketName))
         {
             throw new InvalidOperationException("BucketName is not configured in appsettings.json. Please set AWS:BucketName.");
         }
@@ -79,15 +77,13 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         return _s3Client;
     }
 
-    private S3MetadataService GetMetadataService()
-    {
-        return new S3MetadataService(GetClient(), _bucketName, _metadataLogger);
-    }
-
     public async Task<List<FileNode>> ListFilesAsync(UserRole userRole, string prefix = "", CancellationToken cancellationToken = default)
     {
         var client = GetClient();
-        var metadataService = GetMetadataService();
+        var config = _configService.GetConfiguration();
+        var bucketName = config.AWS.BucketName;
+        var metadataService = new S3MetadataService(client, bucketName, _metadataLogger);
+
         var files = new List<FileNode>();
         string? continuationToken = null;
 
@@ -95,7 +91,7 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         {
             var request = new ListObjectsV2Request
             {
-                BucketName = _bucketName,
+                BucketName = bucketName,
                 Prefix = prefix,
                 ContinuationToken = continuationToken
             };
@@ -132,14 +128,16 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         try
         {
             var client = GetClient();
-            var metadataService = GetMetadataService();
+            var config = _configService.GetConfiguration();
+            var bucketName = config.AWS.BucketName;
+            var metadataService = new S3MetadataService(client, bucketName, _metadataLogger);
 
             using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             using var throttledStream = new FileSyncApp.Core.Services.ThrottledStream(fileStream, _maxBytesPerSecond);
 
             var uploadRequest = new TransferUtilityUploadRequest
             {
-                BucketName = _bucketName,
+                BucketName = bucketName,
                 Key = key,
                 InputStream = throttledStream
             };
@@ -165,6 +163,8 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         try
         {
             var client = GetClient();
+            var config = _configService.GetConfiguration();
+            var bucketName = config.AWS.BucketName;
 
             var fullPath = Path.Combine(localRootPath, s3Key.Replace("/", "\\"));
             var directory = Path.GetDirectoryName(fullPath);
@@ -172,7 +172,7 @@ public class S3FileStorageService : IFileStorageService, IDisposable
 
             var getRequest = new GetObjectRequest
             {
-                BucketName = _bucketName,
+                BucketName = bucketName,
                 Key = s3Key
             };
 
@@ -194,7 +194,8 @@ public class S3FileStorageService : IFileStorageService, IDisposable
     public async Task DeleteFileAsync(string s3Key, CancellationToken cancellationToken = default)
     {
         var client = GetClient();
-        await client.DeleteObjectAsync(_bucketName, s3Key, cancellationToken);
+        var config = _configService.GetConfiguration();
+        await client.DeleteObjectAsync(config.AWS.BucketName, s3Key, cancellationToken);
     }
 
     private bool CanUserAccessFile(UserRole userRole, FileNode node)

@@ -17,7 +17,7 @@ namespace FileSyncApp.S3.Services;
 public class CognitoAuthService : IAuthService, IDisposable
 {
     private readonly CognitoConfig _config;
-    private readonly AmazonCognitoIdentityProviderClient _cognitoClient;
+    private readonly AmazonCognitoIdentityProviderClient? _cognitoClient;
     private readonly ICredentialService _credentialService;
     private readonly ILogger<CognitoAuthService> _logger;
     private UnifiedUser? _currentUser;
@@ -32,18 +32,22 @@ public class CognitoAuthService : IAuthService, IDisposable
         _credentialService = credentialService;
         _logger = logger;
 
-        var cognitoConfig = new AmazonCognitoIdentityProviderConfig
+        if (!string.IsNullOrEmpty(_config.Region))
         {
-            RegionEndpoint = RegionEndpoint.GetBySystemName(_config.Region)
-        };
+            var cognitoConfig = new AmazonCognitoIdentityProviderConfig
+            {
+                RegionEndpoint = RegionEndpoint.GetBySystemName(_config.Region)
+            };
 
-        _cognitoClient = new AmazonCognitoIdentityProviderClient(
-            new AnonymousAWSCredentials(),
-            cognitoConfig);
+            _cognitoClient = new AmazonCognitoIdentityProviderClient(
+                new AnonymousAWSCredentials(),
+                cognitoConfig);
+        }
     }
 
     private bool IsOfflineMode()
     {
+        if (string.IsNullOrEmpty(_config.Region)) return true;
         try
         {
             using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
@@ -55,6 +59,11 @@ public class CognitoAuthService : IAuthService, IDisposable
 
     public async Task<UnifiedUser?> AuthenticateAsync(string username, string password, bool forceOnline = false)
     {
+        if (_cognitoClient == null)
+        {
+            throw new InvalidOperationException("AWS Cognito is not configured. Please check your appsettings.json.");
+        }
+
         try
         {
             if (!forceOnline && IsOfflineMode())
@@ -132,6 +141,8 @@ public class CognitoAuthService : IAuthService, IDisposable
 
     public async Task<bool> RefreshTokensAsync()
     {
+        if (_cognitoClient == null) return false;
+
         if (_currentUser == null || string.IsNullOrEmpty(_currentUser.RefreshToken))
         {
             var cached = _credentialService.LoadRefreshToken();
@@ -211,6 +222,7 @@ public class CognitoAuthService : IAuthService, IDisposable
             user.AwsAccessKeyId = getCredentialsResponse.Credentials.AccessKeyId;
             user.AwsSecretAccessKey = getCredentialsResponse.Credentials.SecretKey;
             user.AwsSessionToken = getCredentialsResponse.Credentials.SessionToken;
+            user.HasAwsCredentials = true;
         }
         catch (Exception ex)
         {
@@ -220,12 +232,14 @@ public class CognitoAuthService : IAuthService, IDisposable
 
     private async Task<Dictionary<string, string>> GetUserDetailsAsync(string accessToken)
     {
+        if (_cognitoClient == null) throw new InvalidOperationException();
         var response = await _cognitoClient.GetUserAsync(new GetUserRequest { AccessToken = accessToken });
         return response.UserAttributes.ToDictionary(a => a.Name, a => a.Value);
     }
 
     private async Task<List<string>> GetUserGroupsAsync(string username, string accessToken)
     {
+        if (_cognitoClient == null) return new List<string>();
         try
         {
             var response = await _cognitoClient.AdminListGroupsForUserAsync(new AdminListGroupsForUserRequest
@@ -256,7 +270,7 @@ public class CognitoAuthService : IAuthService, IDisposable
 
     public async Task SignOutAsync()
     {
-        if (_currentUser != null && !string.IsNullOrEmpty(_currentUser.AccessToken))
+        if (_cognitoClient != null && _currentUser != null && !string.IsNullOrEmpty(_currentUser.AccessToken))
         {
             try
             {

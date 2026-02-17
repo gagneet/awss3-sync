@@ -23,4 +23,10 @@
     <ProjectReference Include="..\FileSyncApp.S3\FileSyncApp.S3.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

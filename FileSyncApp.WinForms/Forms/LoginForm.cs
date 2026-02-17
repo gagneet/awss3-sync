@@ -23,7 +23,7 @@ public partial class LoginForm : KryptonForm
     private void InitializeComponent()
     {
         this.Text = "Login - FileSyncApp";
-        this.Width = 550; // Increased width
+        this.Width = 550; // Increased width as requested
         this.Height = 350; // Increased height
         this.StartPosition = FormStartPosition.CenterScreen;
         this.FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -61,7 +61,7 @@ public partial class LoginForm : KryptonForm
     private async void BtnLogin_Click(object? sender, EventArgs e)
     {
         _btnLogin.Enabled = false;
-        _lblStatus.Text = "Authenticating with " + (_rbCognito.Checked ? "AWS Cognito..." : "Local Provider...");
+        _lblStatus.Text = "Authenticating...";
 
         try
         {
@@ -83,7 +83,7 @@ public partial class LoginForm : KryptonForm
         }
         catch (Exception ex)
         {
-            _lblStatus.Text = $"Authentication Error: {ex.Message}";
+            _lblStatus.Text = $"Error: {ex.Message}";
         }
         finally
         {

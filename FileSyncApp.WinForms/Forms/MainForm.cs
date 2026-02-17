@@ -14,6 +14,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
 {
     private readonly IAuthService _authService;
     private readonly IFileStorageService _s3Service;
+    private readonly IConfigurationService _configService;
 
     private KryptonTreeView _localTreeView = null!;
     private KryptonTreeView _s3TreeView = null!;
@@ -30,10 +31,11 @@ public partial class MainForm : KryptonForm, IFileSyncView
     public int ProgressValue { set => _progressBar.Value = value; }
     public bool ProgressVisible { set => _progressBar.Visible = value; }
 
-    public MainForm(IAuthService authService, IFileStorageService s3Service)
+    public MainForm(IAuthService authService, IFileStorageService s3Service, IConfigurationService configService)
     {
         _authService = authService;
         _s3Service = s3Service;
+        _configService = configService;
         InitializeComponent();
         InitializeTrees();
 
@@ -43,7 +45,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private void InitializeComponent()
     {
         this.Text = "FileSyncApp - Strata S3 Manager";
-        this.Width = 1300; // Increased width
+        this.Width = 1300; // Increased width as requested
         this.Height = 850; // Increased height
         this.StartPosition = FormStartPosition.CenterScreen;
         this.WindowState = FormWindowState.Maximized; // Start maximized
@@ -63,7 +65,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
-            SplitterDistance = 600 // Adjusted initial split
+            SplitterDistance = 600 // More space for S3 window by default
         };
 
         var localGroup = new KryptonGroupBox { Text = "Local Filesystem", Dock = DockStyle.Fill };
@@ -172,8 +174,9 @@ public partial class MainForm : KryptonForm, IFileSyncView
             }
             catch (Exception ex)
             {
+                var bucket = _configService.GetConfiguration().AWS.BucketName;
                 StatusMessage = $"Error: {ex.Message}";
-                MessageBox.Show($"Failed to list S3 contents: {ex.Message}", "S3 Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Failed to list S3 contents. Bucket: '{bucket}'.\n\nError: {ex.Message}", "S3 Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
