@@ -37,24 +37,24 @@ public partial class MainForm : KryptonForm, IFileSyncView
         InitializeComponent();
         InitializeTrees();
 
-        // Suppress unused event warning if necessary, but we keep it for interface compliance
         _ = CancelRequested;
     }
 
     private void InitializeComponent()
     {
         this.Text = "FileSyncApp - Strata S3 Manager";
-        this.Width = 1100;
-        this.Height = 750;
+        this.Width = 1300; // Increased width
+        this.Height = 850; // Increased height
         this.StartPosition = FormStartPosition.CenterScreen;
+        this.WindowState = FormWindowState.Maximized; // Start maximized
 
         var mainPanel = new KryptonPanel { Dock = DockStyle.Fill };
 
-        var toolStrip = new KryptonPanel { Dock = DockStyle.Top, Height = 50 };
-        _btnSync = new KryptonButton { Text = "Sync Now", Location = new Point(10, 10), Width = 100 };
+        var toolStrip = new KryptonPanel { Dock = DockStyle.Top, Height = 60 };
+        _btnSync = new KryptonButton { Text = "Sync Now", Location = new Point(10, 10), Width = 120, Height = 40 };
         _btnSync.Click += (s, e) => SyncRequested?.Invoke(this, EventArgs.Empty);
 
-        _btnRefresh = new KryptonButton { Text = "Refresh", Location = new Point(120, 10), Width = 100 };
+        _btnRefresh = new KryptonButton { Text = "Refresh S3", Location = new Point(140, 10), Width = 120, Height = 40 };
         _btnRefresh.Click += (s, e) => RefreshRequested?.Invoke(this, EventArgs.Empty);
 
         toolStrip.Controls.AddRange(new Control[] { _btnSync, _btnRefresh });
@@ -63,15 +63,15 @@ public partial class MainForm : KryptonForm, IFileSyncView
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
-            SplitterDistance = 540
+            SplitterDistance = 600 // Adjusted initial split
         };
 
-        var localGroup = new KryptonGroupBox { Text = "Local Files", Dock = DockStyle.Fill };
+        var localGroup = new KryptonGroupBox { Text = "Local Filesystem", Dock = DockStyle.Fill };
         _localTreeView = new KryptonTreeView { Dock = DockStyle.Fill };
         _localTreeView.BeforeExpand += LocalTreeView_BeforeExpand;
         localGroup.Panel.Controls.Add(_localTreeView);
 
-        var s3Group = new KryptonGroupBox { Text = "S3 Files", Dock = DockStyle.Fill };
+        var s3Group = new KryptonGroupBox { Text = "AWS S3 Bucket", Dock = DockStyle.Fill };
         _s3TreeView = new KryptonTreeView { Dock = DockStyle.Fill };
         _s3TreeView.BeforeExpand += S3TreeView_BeforeExpand;
         s3Group.Panel.Controls.Add(_s3TreeView);
@@ -80,8 +80,8 @@ public partial class MainForm : KryptonForm, IFileSyncView
         splitContainer.Panel2.Controls.Add(s3Group);
 
         var statusPanel = new KryptonPanel { Dock = DockStyle.Bottom, Height = 40 };
-        _statusLabel = new KryptonLabel { Text = "Ready", Location = new Point(10, 10), Width = 400 };
-        _progressBar = new KryptonProgressBar { Location = new Point(420, 10), Width = 300, Visible = false };
+        _statusLabel = new KryptonLabel { Text = "Ready", Location = new Point(10, 10), Width = 600 };
+        _progressBar = new KryptonProgressBar { Location = new Point(620, 10), Width = 400, Visible = false };
         statusPanel.Controls.AddRange(new Control[] { _statusLabel, _progressBar });
 
         mainPanel.Controls.Add(splitContainer);
@@ -102,7 +102,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
         }
 
         _s3TreeView.Nodes.Clear();
-        var s3Root = new KryptonTreeNode("S3 Bucket") { Tag = "" };
+        var s3Root = new KryptonTreeNode("S3 Bucket Root") { Tag = "" };
         s3Root.Nodes.Add(new KryptonTreeNode("Loading..."));
         _s3TreeView.Nodes.Add(s3Root);
     }
@@ -173,6 +173,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
             catch (Exception ex)
             {
                 StatusMessage = $"Error: {ex.Message}";
+                MessageBox.Show($"Failed to list S3 contents: {ex.Message}", "S3 Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }

@@ -8,7 +8,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Enrichers.Sensitive;
-using Amazon.S3;
 using Amazon;
 
 namespace FileSyncApp.WinForms;
@@ -34,14 +33,6 @@ static class Program
 
                 services.AddSingleton<ICredentialService, CredentialService>();
                 services.AddSingleton<IDatabaseService, DatabaseService>();
-
-                // AWS S3 Client
-                services.AddSingleton<IAmazonS3>(sp => {
-                    var configService = sp.GetRequiredService<IConfigurationService>();
-                    var config = configService.GetConfiguration();
-                    return new AmazonS3Client(config.AWS.AccessKey, config.AWS.SecretKey,
-                        RegionEndpoint.GetBySystemName(config.AWS.Region));
-                });
 
                 // Specific Auth Implementations
                 services.AddSingleton<CognitoAuthService>();

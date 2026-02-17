@@ -23,35 +23,35 @@ public partial class LoginForm : KryptonForm
     private void InitializeComponent()
     {
         this.Text = "Login - FileSyncApp";
-        this.Width = 400;
-        this.Height = 300;
+        this.Width = 550; // Increased width
+        this.Height = 350; // Increased height
         this.StartPosition = FormStartPosition.CenterScreen;
         this.FormBorderStyle = FormBorderStyle.FixedDialog;
         this.MaximizeBox = false;
 
         var panel = new KryptonPanel { Dock = DockStyle.Fill };
 
-        var lblMode = new KryptonLabel { Text = "Login Mode:", Location = new Point(50, 20) };
-        _rbCognito = new KryptonRadioButton { Text = "AWS Cognito", Location = new Point(150, 20), Checked = true };
-        _rbLocal = new KryptonRadioButton { Text = "Local Login", Location = new Point(260, 20) };
+        var lblMode = new KryptonLabel { Text = "Login Mode:", Location = new Point(50, 30), StateCommon = { ShortText = { Font = new Font("Segoe UI", 10, FontStyle.Bold) } } };
+        _rbCognito = new KryptonRadioButton { Text = "AWS Cognito (Secure Online Auth)", Location = new Point(180, 30), Checked = true };
+        _rbLocal = new KryptonRadioButton { Text = "Local Login (Offline Fallback)", Location = new Point(180, 60) };
 
-        var lblUser = new KryptonLabel { Text = "Username:", Location = new Point(50, 60) };
-        _txtUsername = new KryptonTextBox { Location = new Point(150, 60), Width = 180 };
+        var lblUser = new KryptonLabel { Text = "Username:", Location = new Point(50, 110) };
+        _txtUsername = new KryptonTextBox { Location = new Point(180, 110), Width = 250 };
 
-        var lblPass = new KryptonLabel { Text = "Password:", Location = new Point(50, 100) };
-        _txtPassword = new KryptonTextBox { Location = new Point(150, 100), Width = 180, PasswordChar = '●' };
+        var lblPass = new KryptonLabel { Text = "Password:", Location = new Point(50, 150) };
+        _txtPassword = new KryptonTextBox { Location = new Point(180, 150), Width = 250, PasswordChar = '●' };
 
-        _btnLogin = new KryptonButton { Text = "Login", Location = new Point(150, 150), Width = 100 };
+        _btnLogin = new KryptonButton { Text = "Sign In", Location = new Point(180, 200), Width = 120, Height = 40 };
         _btnLogin.Click += BtnLogin_Click;
 
-        _lblStatus = new KryptonLabel { Text = "", Location = new Point(50, 210), Width = 300, StateCommon = { ShortText = { Color1 = Color.Red } } };
+        _lblStatus = new KryptonLabel { Text = "", Location = new Point(50, 260), Width = 450, StateCommon = { ShortText = { Color1 = Color.Red } } };
 
         var lblNote = new KryptonLabel
         {
-            Text = "Local defaults: admin/admin, exec/exec, user/user",
-            Location = new Point(50, 240),
-            Width = 350,
-            StateCommon = { ShortText = { Font = new Font("Segoe UI", 7) } }
+            Text = "Local credentials: admin/admin, exec/exec, user/user",
+            Location = new Point(50, 290),
+            Width = 450,
+            StateCommon = { ShortText = { Font = new Font("Segoe UI", 8, FontStyle.Italic) } }
         };
 
         panel.Controls.AddRange(new Control[] { lblMode, _rbCognito, _rbLocal, lblUser, _txtUsername, lblPass, _txtPassword, _btnLogin, _lblStatus, lblNote });
@@ -61,7 +61,7 @@ public partial class LoginForm : KryptonForm
     private async void BtnLogin_Click(object? sender, EventArgs e)
     {
         _btnLogin.Enabled = false;
-        _lblStatus.Text = "Authenticating...";
+        _lblStatus.Text = "Authenticating with " + (_rbCognito.Checked ? "AWS Cognito..." : "Local Provider...");
 
         try
         {
@@ -78,12 +78,12 @@ public partial class LoginForm : KryptonForm
             }
             else
             {
-                _lblStatus.Text = "Invalid username or password.";
+                _lblStatus.Text = "Invalid username or password. Please check your credentials.";
             }
         }
         catch (Exception ex)
         {
-            _lblStatus.Text = $"Error: {ex.Message}";
+            _lblStatus.Text = $"Authentication Error: {ex.Message}";
         }
         finally
         {
