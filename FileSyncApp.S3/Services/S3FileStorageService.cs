@@ -25,13 +25,13 @@ public class S3FileStorageService : IFileStorageService, IDisposable
     {
         _s3Client = s3Client;
         var config = configService.GetConfiguration();
-        _bucketName = config.AWS?.BucketName ?? throw new InvalidOperationException("AWS configuration is missing");
+        _bucketName = config.AWS.BucketName;
         _logger = logger;
         _metadataService = new S3MetadataService(s3Client, _bucketName, metadataLogger);
 
         _transferUtility = new TransferUtility(_s3Client);
-        _transferSemaphore = new SemaphoreSlim(config.Performance?.MaxConcurrentUploads ?? 3);
-        _maxBytesPerSecond = config.Performance?.MaxBytesPerSecond ?? 0;
+        _transferSemaphore = new SemaphoreSlim(config.Performance.MaxConcurrentUploads);
+        _maxBytesPerSecond = config.Performance.MaxBytesPerSecond;
     }
 
     public async Task<List<FileNode>> ListFilesAsync(UserRole userRole, string prefix = "", CancellationToken cancellationToken = default)

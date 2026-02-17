@@ -35,7 +35,7 @@ public class ThrottledStream : Stream
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         Throttle(count);
-        int read = await _baseStream.ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
+        int read = await _baseStream.ReadAsync(buffer, offset, count, cancellationToken);
         _totalBytesRead += read;
         return read;
     }

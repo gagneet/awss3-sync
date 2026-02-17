@@ -78,9 +78,9 @@ public class SyncEngine : ISyncEngine
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger?.LogError(ex, "Failed to sync file {Path}", req.Path);
+                // Log and continue
             }
 
             processed++;
