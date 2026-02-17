@@ -32,7 +32,17 @@ static class Program
 
                 services.AddSingleton<ICredentialService, CredentialService>();
                 services.AddSingleton<IDatabaseService, DatabaseService>();
-                services.AddSingleton<IAuthService, CognitoAuthService>();
+
+                // Specific Auth Implementations
+                services.AddSingleton<CognitoAuthService>();
+                services.AddSingleton(sp => new LocalAuthService());
+
+                // Unified Auth Service
+                services.AddSingleton<IAuthService>(sp =>
+                    new UnifiedAuthService(
+                        sp.GetRequiredService<CognitoAuthService>(),
+                        sp.GetRequiredService<LocalAuthService>()));
+
                 services.AddSingleton<IFileStorageService, S3FileStorageService>();
                 services.AddSingleton<ISyncEngine, SyncEngine>();
 

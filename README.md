@@ -9,8 +9,25 @@ A robust, performant, and secure Windows desktop application for bidirectional s
 - **High Performance**: Parallel transfers, multipart uploads, and metadata caching for maximum efficiency.
 - **Responsive Interface**: Async lazy-loading TreeViews ensure the UI never hangs during directory browsing.
 - **Enhanced Security**: Secure credential storage using **Windows Credential Manager** and **DPAPI**.
+- **Unified Authentication**: Support for both **AWS Cognito** and **Local Login** modes.
 - **Bandwidth Management**: Integrated throttling support.
 - **Scheduled Operations**: Background sync support via **Quartz.NET**.
+
+## 🔐 Authentication & Credentials
+
+The application supports two login modes:
+
+### 1. AWS Cognito (Recommended)
+Uses AWS Cognito User Pools for authentication. This mode provides full S3 access based on IAM roles.
+- Requires Cognito configuration in `appsettings.json`.
+
+### 2. Local Login (Fallback)
+Allows access without AWS Cognito. Useful for testing or when Cognito is unavailable.
+- **Default Credentials**:
+    - **Administrator**: `admin` / `admin`
+    - **Executive**: `exec` / `exec`
+    - **User**: `user` / `user`
+- Note: Local login provides limited functionality unless manual AWS credentials are also provided in `appsettings.json`.
 
 ## 🛠 Project Structure
 
