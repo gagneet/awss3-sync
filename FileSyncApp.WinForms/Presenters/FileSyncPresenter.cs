@@ -78,7 +78,7 @@ public class FileSyncPresenter
 
         if (_view is Form form)
         {
-            await (Task)form.Invoke(new Func<Task>(async () =>
+            form.Invoke(new Action(() =>
             {
                 using var conflictDialog = new ConflictForm(req.Path, req.Local!, req.Remote!);
                 if (conflictDialog.ShowDialog() == DialogResult.OK)
@@ -88,7 +88,7 @@ public class FileSyncPresenter
             }));
         }
 
-        return result;
+        return await Task.FromResult(result);
     }
 
     private async void RefreshRemote()

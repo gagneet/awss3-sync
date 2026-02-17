@@ -1,3 +1,5 @@
+using System.IO;
+using System.Linq;
 using FileSyncApp.Core.Interfaces;
 using FileSyncApp.Core.Models;
 using Krypton.Toolkit;
@@ -30,6 +32,9 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _s3Service = s3Service;
         InitializeComponent();
         InitializeTrees();
+
+        // Suppress unused event warning if necessary, but we keep it for interface compliance
+        _ = CancelRequested;
     }
 
     private void InitializeComponent()
@@ -175,6 +180,6 @@ public partial class MainForm : KryptonForm, IFileSyncView
 
     public void UpdateRemoteTree(List<FileNode> nodes)
     {
-        UpdateLocalTree(nodes); // Just reset for now
+        UpdateLocalTree(nodes);
     }
 }

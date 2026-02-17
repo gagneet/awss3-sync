@@ -42,6 +42,17 @@ public class CognitoAuthService : IAuthService, IDisposable
             cognitoConfig);
     }
 
+    private bool IsOfflineMode()
+    {
+        try
+        {
+            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            var result = client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").Result;
+            return false;
+        }
+        catch { return true; }
+    }
+
     public async Task<UnifiedUser?> AuthenticateAsync(string username, string password, bool forceOnline = false)
     {
         try
@@ -115,7 +126,7 @@ public class CognitoAuthService : IAuthService, IDisposable
 
     private async Task<UnifiedUser?> AuthenticateOfflineAsync(string username, string password)
     {
-        await Task.Yield();
+        await Task.CompletedTask;
         return null;
     }
 
@@ -241,17 +252,6 @@ public class CognitoAuthService : IAuthService, IDisposable
         using var hmac = new HMACSHA256(key);
         byte[] hash = hmac.ComputeHash(message);
         return Convert.ToBase64String(hash);
-    }
-
-    private bool IsOfflineMode()
-    {
-        try
-        {
-            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var result = client.GetAsync($"https://cognito-idp.{_config.Region}.amazonaws.com").Result;
-            return false;
-        }
-        catch { return true; }
     }
 
     public async Task SignOutAsync()
