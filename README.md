@@ -45,11 +45,21 @@ Allows access without AWS Cognito. Useful for testing or when Cognito is unavail
 
 ## 🔨 Build Instructions
 
+### Pre-requisites
+- **.NET 8.0 SDK** or later.
+- **Visual Studio 2022** with the **.NET Desktop Development** workload installed.
+- An **AWS Account** with an S3 bucket and Cognito User Pool/Identity Pool if using AWS authentication.
+
 ### Using Visual Studio
 1. Open `FileSyncApp.sln`.
-2. Wait for NuGet packages to restore automatically.
-3. Set `FileSyncApp.WinForms` as the Startup Project.
-4. Press **F5** to build and run.
+2. Wait for NuGet packages to restore automatically (or right-click solution -> Restore NuGet Packages).
+3. Ensure all projects are targeted to **.NET 8.0**.
+4. Set `FileSyncApp.WinForms` as the Startup Project.
+5. Press **F5** to build and run.
+
+### Troubleshooting Build Issues
+- If you get "Metadata file could not be found" errors, try **Clean Solution** and then **Rebuild Solution**.
+- Ensure `System.IO` and `System.Linq` namespaces are available (the project uses ImplicitUsings, but explicit usings have been added to key files for compatibility).
 
 ### Using .NET CLI
 ```bash
