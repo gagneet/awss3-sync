@@ -222,7 +222,6 @@ public class CognitoAuthService : IAuthService, IDisposable
             user.AwsAccessKeyId = getCredentialsResponse.Credentials.AccessKeyId;
             user.AwsSecretAccessKey = getCredentialsResponse.Credentials.SecretKey;
             user.AwsSessionToken = getCredentialsResponse.Credentials.SessionToken;
-            user.HasAwsCredentials = true;
         }
         catch (Exception ex)
         {
