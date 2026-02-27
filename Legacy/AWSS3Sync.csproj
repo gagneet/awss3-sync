@@ -9,10 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.Core" Version="3.7.500.13" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.500.13" />
-    <PackageReference Include="AWSSDK.CognitoIdentity" Version="3.7.501.4" />
-    <PackageReference Include="AWSSDK.CognitoIdentityProvider" Version="3.7.502.5" />
+    <PackageReference Include="AWSSDK.Core" Version="3.7.500.85" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.510.11" />
+    <PackageReference Include="AWSSDK.CognitoIdentity" Version="3.7.502.48" />
+    <PackageReference Include="AWSSDK.CognitoIdentityProvider" Version="3.7.505" />
     <PackageReference Include="Amazon.Extensions.CognitoAuthentication" Version="2.5.6" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.8" />
