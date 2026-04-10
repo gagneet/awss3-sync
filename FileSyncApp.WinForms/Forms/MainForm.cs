@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using FileSyncApp.Core.Interfaces;
 using FileSyncApp.Core.Models;
@@ -6,1061 +7,999 @@ using Krypton.Toolkit;
 namespace FileSyncApp.WinForms.Forms;
 
 /// <summary>
-/// Main application form with dual-pane interface for local/S3 file management
-/// Features: Bidirectional sync, download (single/folder/ZIP), upload, conflict resolution
+/// Dual-pane file manager: Local (left) | AWS S3 (right).
+/// Navigate folders by double-clicking. Check files to select for upload/download.
 /// </summary>
 public partial class MainForm : KryptonForm, IFileSyncView
 {
+    // ── Services ──────────────────────────────────────────────────────────
     private readonly IAuthService _authService;
     private readonly IFileStorageService _s3Service;
     private readonly IConfigurationService _configService;
     private readonly ISyncEngine _syncEngine;
 
-    // UI Controls
-    private KryptonSplitContainer _splitContainer = null!;
-    private KryptonTreeView _localTreeView = null!;
-    private KryptonTreeView _s3TreeView = null!;
-    private KryptonLabel _statusLabel = null!;
-    private KryptonProgressBar _progressBar = null!;
-    private KryptonButton _btnSync = null!;
-    private KryptonButton _btnRefresh = null!;
+    // ── Toolbar buttons ───────────────────────────────────────────────────
+    private KryptonButton _btnSync     = null!;
+    private KryptonButton _btnUpload   = null!;
+    private KryptonButton _btnDownload = null!;
+    private KryptonButton _btnRefresh  = null!;
     private KryptonButton _btnSettings = null!;
-    private KryptonButton _btnBrowseLocal = null!;
-    private KryptonTextBox _txtLocalPath = null!;
-    private ContextMenuStrip _localContextMenu = null!;
-    private ContextMenuStrip _s3ContextMenu = null!;
-    private Button _btnCancel = null!;
+    private Button        _btnCancel   = null!;
 
-    // State
-    private bool _isLoadingS3;
-    private bool _isLoadingLocal;
-    private string _localRootPath = string.Empty;
+    // ── Local pane ────────────────────────────────────────────────────────
+    private KryptonTextBox _txtLocalPath   = null!;
+    private KryptonButton  _btnBrowseLocal = null!;
+    private KryptonButton  _btnLocalUp     = null!;
+    private ListView       _localListView  = null!;
+
+    // ── S3 pane ───────────────────────────────────────────────────────────
+    private KryptonTextBox _txtS3Prefix  = null!;
+    private KryptonButton  _btnS3Up      = null!;
+    private KryptonButton  _btnS3Refresh = null!;
+    private ListView       _s3ListView   = null!;
+
+    // ── Status bar ────────────────────────────────────────────────────────
+    private KryptonLabel       _statusLabel = null!;
+    private KryptonProgressBar _progressBar = null!;
+
+    // ── State ─────────────────────────────────────────────────────────────
+    private string                   _localCurrentPath  = string.Empty;
+    private string                   _s3CurrentPrefix   = string.Empty;
+    private bool                     _isLoadingS3;
     private CancellationTokenSource? _currentOperationCts;
 
-    // Events for presenter
+    // ── IFileSyncView events ──────────────────────────────────────────────
     public event EventHandler? SyncRequested;
     public event EventHandler? CancelRequested;
     public event EventHandler? RefreshRequested;
     public event EventHandler<string>? LocalPathSelected;
 
-    public string StatusMessage { set => SafeSetStatus(value); }
-    public int ProgressValue { set => SafeSetProgress(value); }
-    public bool ProgressVisible { set => SafeSetProgressVisible(value); }
+    public string StatusMessage  { set => SafeSetStatus(value); }
+    public int    ProgressValue  { set => SafeSetProgress(value); }
+    public bool   ProgressVisible { set => SafeSetProgressVisible(value); }
 
+    // ─────────────────────────────────────────────────────────────────────
     public MainForm(
         IAuthService authService,
         IFileStorageService s3Service,
         IConfigurationService configService,
         ISyncEngine syncEngine)
     {
-        _authService = authService;
-        _s3Service = s3Service;
+        _authService   = authService;
+        _s3Service     = s3Service;
         _configService = configService;
-        _syncEngine = syncEngine;
+        _syncEngine    = syncEngine;
 
-        InitializeComponent();
-        InitializeContextMenus();
-        InitializeTrees();
-        WireUpEvents();
+        BuildUI();
+        BuildContextMenus();
+        WireEvents();
     }
 
-    #region Initialization
+    // ══════════════════════════════════════════════════════════════════════
+    #region UI construction
 
-    private void InitializeComponent()
+    private void BuildUI()
     {
-        Text = "FileSyncApp - Strata S3 Document Manager";
-        Width = 1400;
-        Height = 900;
-        StartPosition = FormStartPosition.CenterScreen;
-        WindowState = FormWindowState.Maximized;
+        Text            = "FileSyncApp – S3 Document Manager";
+        Size            = new Size(1440, 900);
+        MinimumSize     = new Size(960, 600);
+        StartPosition   = FormStartPosition.CenterScreen;
+        WindowState     = FormWindowState.Maximized;
 
-        var mainPanel = new KryptonPanel { Dock = DockStyle.Fill };
-
-        // Toolbar
-        var toolStrip = new KryptonPanel { Dock = DockStyle.Top, Height = 70 };
-        
-        _btnSync = new KryptonButton 
-        { 
-            Text = "Sync Now", 
-            Location = new Point(10, 15), 
-            Width = 120, 
-            Height = 40
+        // ── Toolbar ─────────────────────────────────────────────────────
+        var toolbar = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 56,
+            BackColor = Color.FromArgb(45, 45, 48)
         };
 
-        _btnRefresh = new KryptonButton 
-        { 
-            Text = "Refresh", 
-            Location = new Point(140, 15), 
-            Width = 100, 
-            Height = 40 
+        _btnSync     = ToolBtn("⇄  Sync Now",       Color.FromArgb(0, 122, 204));
+        _btnUpload   = ToolBtn("⬆  Upload →",       Color.FromArgb(30, 120, 0));
+        _btnDownload = ToolBtn("← ⬇  Download",    Color.FromArgb(0, 100, 170));
+        _btnRefresh  = ToolBtn("↺  Refresh",        Color.FromArgb(70, 70, 80));
+        _btnSettings = ToolBtn("⚙  Settings",       Color.FromArgb(70, 70, 80));
+
+        _btnCancel = new Button
+        {
+            Text      = "✕  Cancel",
+            BackColor = Color.FromArgb(160, 0, 0),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font      = new Font("Segoe UI", 9, FontStyle.Bold),
+            Size      = new Size(100, 38),
+            Visible   = false
+        };
+        _btnCancel.FlatAppearance.BorderSize = 0;
+
+        _btnUpload.Enabled   = false;
+        _btnDownload.Enabled = false;
+
+        int bx = 10;
+        foreach (Control btn in new Control[] { _btnSync, _btnUpload, _btnDownload, _btnRefresh, _btnSettings, _btnCancel })
+        {
+            btn.Location = new Point(bx, 9);
+            btn.Size     = new Size(110, 38);
+            bx += 116;
+        }
+        toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnRefresh, _btnSettings, _btnCancel });
+
+        // ── Split container ─────────────────────────────────────────────
+        var split = new SplitContainer
+        {
+            Dock             = DockStyle.Fill,
+            Orientation      = Orientation.Vertical,
+            SplitterWidth    = 5,
+            SplitterDistance = 680,
+            Panel1MinSize    = 320,
+            Panel2MinSize    = 320
         };
 
-        _btnSettings = new KryptonButton 
-        { 
-            Text = "Settings", 
-            Location = new Point(250, 15), 
-            Width = 100, 
-            Height = 40 
+        split.Panel1.Controls.Add(BuildLocalPane());
+        split.Panel2.Controls.Add(BuildS3Pane());
+
+        // ── Status bar ──────────────────────────────────────────────────
+        var statusBar = new Panel
+        {
+            Dock      = DockStyle.Bottom,
+            Height    = 36,
+            BackColor = Color.FromArgb(37, 37, 38)
+        };
+        _statusLabel = new KryptonLabel
+        {
+            Text     = "Ready — browse a local folder, then connect to S3",
+            Location = new Point(8, 8),
+            Width    = 700
+        };
+        _statusLabel.StateCommon.ShortText.Color1 = Color.White;
+        _progressBar = new KryptonProgressBar
+        {
+            Location = new Point(720, 6),
+            Size     = new Size(500, 22),
+            Visible  = false,
+            Maximum  = 100
+        };
+        statusBar.Controls.AddRange(new Control[] { _statusLabel, _progressBar });
+
+        Controls.Add(split);
+        Controls.Add(toolbar);
+        Controls.Add(statusBar);
+    }
+
+    private Panel BuildLocalPane()
+    {
+        var pane = new Panel { Dock = DockStyle.Fill };
+
+        var header = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 54,
+            BackColor = Color.FromArgb(28, 28, 28)
         };
 
-        var lblLocalPath = new KryptonLabel 
-        { 
-            Text = "Local Folder:", 
-            Location = new Point(380, 22) 
+        var lbl = new Label
+        {
+            Text      = "📁  Local Files",
+            ForeColor = Color.White,
+            Font      = new Font("Segoe UI", 10, FontStyle.Bold),
+            Location  = new Point(8, 15),
+            AutoSize  = true
         };
 
-        _txtLocalPath = new KryptonTextBox 
-        { 
-            Location = new Point(470, 18), 
-            Width = 400, 
-            Height = 30,
+        _txtLocalPath = new KryptonTextBox
+        {
+            Location = new Point(140, 13),
+            Size     = new Size(420, 28),
             ReadOnly = true
         };
+        _txtLocalPath.Font = new Font("Consolas", 9);
 
-        _btnBrowseLocal = new KryptonButton 
-        { 
-            Text = "Browse...", 
-            Location = new Point(880, 15), 
-            Width = 90, 
-            Height = 40 
+        _btnBrowseLocal = new KryptonButton
+        {
+            Text     = "Browse…",
+            Location = new Point(570, 11),
+            Size     = new Size(80, 30)
+        };
+        _btnLocalUp = new KryptonButton
+        {
+            Text     = "⬆ Up",
+            Location = new Point(658, 11),
+            Size     = new Size(60, 30),
+            Enabled  = false
         };
 
-        toolStrip.Controls.AddRange(new Control[] 
-        { 
-            _btnSync, _btnRefresh, _btnSettings, 
-            lblLocalPath, _txtLocalPath, _btnBrowseLocal 
+        header.Controls.AddRange(new Control[] { lbl, _txtLocalPath, _btnBrowseLocal, _btnLocalUp });
+
+        _localListView = new ListView
+        {
+            Dock             = DockStyle.Fill,
+            View             = View.Details,
+            CheckBoxes       = true,
+            FullRowSelect    = true,
+            GridLines        = true,
+            ShowItemToolTips = true,
+            Font             = new Font("Segoe UI", 9),
+            BackColor        = Color.FromArgb(30, 30, 30),
+            ForeColor        = Color.White
+        };
+        _localListView.Columns.AddRange(new[]
+        {
+            new ColumnHeader { Text = "Name",     Width = 300 },
+            new ColumnHeader { Text = "Size",     Width = 85, TextAlign = HorizontalAlignment.Right },
+            new ColumnHeader { Text = "Modified", Width = 130 },
+            new ColumnHeader { Text = "Type",     Width = 70 }
         });
 
-        // Split container for dual-pane view
-        _splitContainer = new KryptonSplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
-            SplitterDistance = 650,
-            Panel1MinSize = 300,
-            Panel2MinSize = 300
-        };
-
-        // Local panel (left)
-        var localGroup = new KryptonGroupBox 
-        { 
-            Text = "Local Files", 
-            Dock = DockStyle.Fill 
-        };
-        _localTreeView = new KryptonTreeView 
-        { 
-            Dock = DockStyle.Fill,
-            CheckBoxes = true,
-            ShowNodeToolTips = true
-        };
-        localGroup.Panel.Controls.Add(_localTreeView);
-
-        // S3 panel (right)
-        var s3Group = new KryptonGroupBox 
-        { 
-            Text = "AWS S3 Bucket", 
-            Dock = DockStyle.Fill 
-        };
-        _s3TreeView = new KryptonTreeView 
-        { 
-            Dock = DockStyle.Fill,
-            CheckBoxes = true,
-            ShowNodeToolTips = true
-        };
-        s3Group.Panel.Controls.Add(_s3TreeView);
-
-        _splitContainer.Panel1.Controls.Add(localGroup);
-        _splitContainer.Panel2.Controls.Add(s3Group);
-
-        // Status bar
-        var statusPanel = new KryptonPanel { Dock = DockStyle.Bottom, Height = 45 };
-        _statusLabel = new KryptonLabel 
-        { 
-            Text = "Ready", 
-            Location = new Point(10, 12), 
-            Width = 600 
-        };
-        _progressBar = new KryptonProgressBar 
-        { 
-            Location = new Point(620, 10), 
-            Width = 500, 
-            Height = 25,
-            Visible = false 
-        };
-
-        _btnCancel = new Button 
-        { 
-            Text = "Cancel", 
-            Location = new Point(1130, 8), 
-            Width = 80, 
-            Height = 28,
-            Visible = false 
-        };
-        _btnCancel.Click += (s, e) => CancelCurrentOperation();
-
-        statusPanel.Controls.AddRange(new Control[] { _statusLabel, _progressBar, _btnCancel });
-
-        mainPanel.Controls.Add(_splitContainer);
-        mainPanel.Controls.Add(toolStrip);
-        mainPanel.Controls.Add(statusPanel);
-
-        Controls.Add(mainPanel);
+        pane.Controls.Add(_localListView);
+        pane.Controls.Add(header);
+        return pane;
     }
 
-    private void InitializeContextMenus()
+    private Panel BuildS3Pane()
     {
-        // Local context menu
-        _localContextMenu = new ContextMenuStrip();
-        _localContextMenu.Items.AddRange(new ToolStripItem[]
-        {
-            new ToolStripMenuItem("Upload to S3", null, OnUploadSelected),
-            new ToolStripMenuItem("Open in Explorer", null, OnOpenInExplorer),
-            new ToolStripSeparator(),
-            new ToolStripMenuItem("Refresh", null, (s, e) => RefreshLocalTree()),
-            new ToolStripMenuItem("Exclude from Sync", null, OnExcludeFromSync),
-            new ToolStripSeparator(),
-            new ToolStripMenuItem("Properties", null, OnShowLocalProperties)
-        });
-        _localTreeView.ContextMenuStrip = _localContextMenu;
+        var pane = new Panel { Dock = DockStyle.Fill };
 
-        // S3 context menu
-        _s3ContextMenu = new ContextMenuStrip();
-        _s3ContextMenu.Items.AddRange(new ToolStripItem[]
+        var header = new Panel
         {
-            new ToolStripMenuItem("Download", null, OnDownloadSelected),
-            new ToolStripMenuItem("Download as ZIP", null, OnDownloadAsZip),
-            new ToolStripMenuItem("Download Folder", null, OnDownloadFolder),
-            new ToolStripSeparator(),
-            new ToolStripMenuItem("Copy S3 URL", null, OnCopyS3Url),
-            new ToolStripMenuItem("Refresh", null, (s, e) => RefreshS3Tree()),
-            new ToolStripSeparator(),
-            new ToolStripMenuItem("Delete", null, OnDeleteFromS3),
-            new ToolStripSeparator(),
-            new ToolStripMenuItem("Properties", null, OnShowS3Properties)
+            Dock      = DockStyle.Top,
+            Height    = 54,
+            BackColor = Color.FromArgb(16, 36, 56)
+        };
+
+        var lbl = new Label
+        {
+            Text      = "☁  AWS S3 Bucket",
+            ForeColor = Color.White,
+            Font      = new Font("Segoe UI", 10, FontStyle.Bold),
+            Location  = new Point(8, 15),
+            AutoSize  = true
+        };
+
+        _txtS3Prefix = new KryptonTextBox
+        {
+            Location = new Point(172, 13),
+            Size     = new Size(390, 28),
+            ReadOnly = true
+        };
+        _txtS3Prefix.Font = new Font("Consolas", 9);
+
+        _btnS3Up = new KryptonButton
+        {
+            Text     = "⬆ Up",
+            Location = new Point(570, 11),
+            Size     = new Size(60, 30),
+            Enabled  = false
+        };
+        _btnS3Refresh = new KryptonButton
+        {
+            Text     = "↺",
+            Location = new Point(638, 11),
+            Size     = new Size(40, 30)
+        };
+
+        header.Controls.AddRange(new Control[] { lbl, _txtS3Prefix, _btnS3Up, _btnS3Refresh });
+
+        _s3ListView = new ListView
+        {
+            Dock             = DockStyle.Fill,
+            View             = View.Details,
+            CheckBoxes       = true,
+            FullRowSelect    = true,
+            GridLines        = true,
+            ShowItemToolTips = true,
+            Font             = new Font("Segoe UI", 9),
+            BackColor        = Color.FromArgb(20, 30, 40),
+            ForeColor        = Color.White
+        };
+        _s3ListView.Columns.AddRange(new[]
+        {
+            new ColumnHeader { Text = "Name",     Width = 300 },
+            new ColumnHeader { Text = "Size",     Width = 85, TextAlign = HorizontalAlignment.Right },
+            new ColumnHeader { Text = "Modified", Width = 130 },
+            new ColumnHeader { Text = "Key",      Width = 200 }
         });
-        _s3TreeView.ContextMenuStrip = _s3ContextMenu;
+
+        pane.Controls.Add(_s3ListView);
+        pane.Controls.Add(header);
+        return pane;
     }
 
-    private void InitializeTrees()
-    {
-        // Initialize local tree with drives
-        _localTreeView.Nodes.Clear();
-        foreach (var drive in DriveInfo.GetDrives().Where(d => d.IsReady))
+    private static KryptonButton ToolBtn(string text, Color back) =>
+        new KryptonButton
         {
-            var node = new TreeNode($"{drive.Name} ({drive.DriveType})")
+            Text = text,
+            StateCommon =
             {
-                Tag = drive.RootDirectory,
-                ToolTipText = $"{drive.TotalFreeSpace / (1024 * 1024 * 1024):N0} GB free"
-            };
-            node.Nodes.Add(new TreeNode("Loading..."));
-            _localTreeView.Nodes.Add(node);
-        }
+                Back    = { Color1 = back, ColorStyle = PaletteColorStyle.Solid },
+                Content = { ShortText = { Color1 = Color.White, Font = new Font("Segoe UI", 9, FontStyle.Bold) } }
+            }
+        };
 
-        // Initialize S3 tree with root
-        _s3TreeView.Nodes.Clear();
-        var config = _configService.GetConfiguration();
-        var s3Root = new TreeNode($"S3: {config.AWS.BucketName}") { Tag = "" };
-        s3Root.Nodes.Add(new TreeNode("Loading..."));
-        _s3TreeView.Nodes.Add(s3Root);
+    private void BuildContextMenus()
+    {
+        var localCtx = new ContextMenuStrip();
+        localCtx.Items.AddRange(new ToolStripItem[]
+        {
+            new ToolStripMenuItem("Upload to S3",       null, OnUploadSelected),
+            new ToolStripMenuItem("Open in Explorer",   null, OnOpenInExplorer),
+            new ToolStripSeparator(),
+            new ToolStripMenuItem("Refresh",            null, (s, e) => LoadLocalFolder(_localCurrentPath)),
+            new ToolStripSeparator(),
+            new ToolStripMenuItem("Properties",         null, OnShowLocalProperties)
+        });
+        _localListView.ContextMenuStrip = localCtx;
+
+        var s3Ctx = new ContextMenuStrip();
+        s3Ctx.Items.AddRange(new ToolStripItem[]
+        {
+            new ToolStripMenuItem("Download",           null, OnDownloadSelected),
+            new ToolStripMenuItem("Download as ZIP",    null, OnDownloadAsZip),
+            new ToolStripMenuItem("Download Folder",    null, OnDownloadFolder),
+            new ToolStripSeparator(),
+            new ToolStripMenuItem("Copy Presigned URL", null, OnCopyS3Url),
+            new ToolStripMenuItem("Refresh",            null, async (s, e) => await LoadS3ListAsync(_s3CurrentPrefix)),
+            new ToolStripSeparator(),
+            new ToolStripMenuItem("Delete from S3",     null, OnDeleteFromS3),
+            new ToolStripSeparator(),
+            new ToolStripMenuItem("Properties",         null, OnShowS3Properties)
+        });
+        _s3ListView.ContextMenuStrip = s3Ctx;
     }
 
-    private void WireUpEvents()
+    private void WireEvents()
     {
-        _btnSync.Click += async (s, e) => await PerformSyncAsync();
-        _btnRefresh.Click += (s, e) => { RefreshLocalTree(); RefreshS3Tree(); };
+        _btnSync.Click     += async (s, e) => await PerformSyncAsync();
+        _btnUpload.Click   += OnUploadSelected;
+        _btnDownload.Click += OnDownloadSelected;
+        _btnRefresh.Click  += async (s, e) => { LoadLocalFolder(_localCurrentPath); await LoadS3ListAsync(_s3CurrentPrefix); };
         _btnSettings.Click += (s, e) => ShowSettingsDialog();
+        _btnCancel.Click   += (s, e) => CancelCurrentOperation();
+
         _btnBrowseLocal.Click += (s, e) => BrowseForLocalFolder();
+        _btnLocalUp.Click     += (s, e) => NavigateLocalUp();
+        _btnS3Up.Click        += async (s, e) => await NavigateS3UpAsync();
+        _btnS3Refresh.Click   += async (s, e) => await LoadS3ListAsync(_s3CurrentPrefix);
 
-        _localTreeView.BeforeExpand += LocalTreeView_BeforeExpand;
-        _s3TreeView.BeforeExpand += S3TreeView_BeforeExpand;
+        _localListView.ItemChecked   += (s, e) => UpdateToolbarButtons();
+        _localListView.DoubleClick   += LocalList_DoubleClick;
+        _s3ListView.ItemChecked      += (s, e) => UpdateToolbarButtons();
+        _s3ListView.DoubleClick      += S3List_DoubleClick;
 
-        _localTreeView.NodeMouseDoubleClick += LocalTreeView_DoubleClick;
-        _s3TreeView.NodeMouseDoubleClick += S3TreeView_DoubleClick;
+        // Drag local items onto S3 pane
+        _localListView.ItemDrag += (s, e) => _localListView.DoDragDrop(e.Item!, DragDropEffects.Copy);
+        _s3ListView.AllowDrop    = true;
+        _s3ListView.DragEnter   += (s, e) => { if (e.Data!.GetDataPresent(typeof(ListViewItem))) e.Effect = DragDropEffects.Copy; };
+        _s3ListView.DragDrop    += (s, e) => OnUploadSelected(s, EventArgs.Empty);
 
-        // Drag and drop
-        _s3TreeView.AllowDrop = true;
-        _s3TreeView.DragEnter += S3TreeView_DragEnter;
-        _s3TreeView.DragDrop += S3TreeView_DragDrop;
-
-        // Sync engine events
         _syncEngine.ConflictsDetected += OnConflictsDetected;
+    }
+
+    protected override async void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        await LoadS3ListAsync("");
+    }
+
+    private void UpdateToolbarButtons()
+    {
+        _btnUpload.Enabled   = GetCheckedLocalFiles().Any();
+        _btnDownload.Enabled = GetCheckedS3Nodes().Any();
     }
 
     #endregion
 
-    #region Tree View Loading
+    // ══════════════════════════════════════════════════════════════════════
+    #region Local pane — navigation & loading
 
-    private void LocalTreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
+    private void BrowseForLocalFolder()
     {
-        if (_isLoadingLocal || e.Node == null) return;
-        if (e.Node.Nodes.Count != 1 || e.Node.Nodes[0].Text != "Loading...") return;
-
-        _isLoadingLocal = true;
-        e.Node.Nodes.Clear();
-
-        var dirInfo = e.Node.Tag as DirectoryInfo;
-        if (dirInfo == null && e.Node.Tag is string path)
-            dirInfo = new DirectoryInfo(path);
-
-        if (dirInfo == null)
+        using var dlg = new FolderBrowserDialog { Description = "Select local folder to sync with S3" };
+        if (dlg.ShowDialog() == DialogResult.OK)
         {
-            _isLoadingLocal = false;
-            return;
+            LocalPathSelected?.Invoke(this, dlg.SelectedPath);
+            LoadLocalFolder(dlg.SelectedPath);
+        }
+    }
+
+    private void LoadLocalFolder(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+
+        _localCurrentPath = path;
+        _txtLocalPath.Text = path;
+        _btnLocalUp.Enabled = Directory.GetParent(path) != null;
+
+        _localListView.BeginUpdate();
+        _localListView.Items.Clear();
+
+        // ".." parent entry
+        var parent = Directory.GetParent(path);
+        if (parent != null)
+        {
+            var up = new ListViewItem("..")
+            {
+                Tag       = (object)parent,
+                ForeColor = Color.DimGray,
+                ToolTipText = "Go up one level"
+            };
+            up.SubItems.AddRange(new[] { "", "", "" });
+            _localListView.Items.Add(up);
         }
 
         try
         {
-            _localTreeView.BeginUpdate();
+            var dir = new DirectoryInfo(path);
 
-            // Load subdirectories
-            foreach (var dir in dirInfo.EnumerateDirectories().Take(500))
+            foreach (var sub in dir.EnumerateDirectories().OrderBy(d => d.Name))
             {
                 try
                 {
-                    var node = new TreeNode($"[DIR] {dir.Name}")
-                    {
-                        Tag = dir,
-                        ToolTipText = $"Modified: {dir.LastWriteTime:g}"
-                    };
-
-                    try
-                    {
-                        if (dir.EnumerateFileSystemInfos().Any())
-                            node.Nodes.Add(new TreeNode("Loading..."));
-                    }
-                    catch { }
-
-                    e.Node.Nodes.Add(node);
+                    var item = new ListViewItem($"📁  {sub.Name}") { Tag = (object)sub };
+                    item.SubItems.AddRange(new[] { "—", sub.LastWriteTime.ToString("g"), "Folder" });
+                    _localListView.Items.Add(item);
                 }
                 catch (UnauthorizedAccessException) { }
             }
 
-            // Load files
-            foreach (var file in dirInfo.EnumerateFiles().Take(500))
+            foreach (var file in dir.EnumerateFiles().OrderBy(f => f.Name))
             {
-                var sizeStr = FormatFileSize(file.Length);
-                var node = new TreeNode($"{file.Name}")
+                var item = new ListViewItem($"📄  {file.Name}") { Tag = (object)file };
+                item.SubItems.AddRange(new[]
                 {
-                    Tag = file,
-                    ToolTipText = $"Size: {sizeStr}\nModified: {file.LastWriteTime:g}"
-                };
-                e.Node.Nodes.Add(node);
+                    FormatSize(file.Length),
+                    file.LastWriteTime.ToString("g"),
+                    file.Extension.TrimStart('.').ToUpper()
+                });
+                item.ToolTipText = $"Size: {FormatSize(file.Length)}  Modified: {file.LastWriteTime:g}\nPath: {file.FullName}";
+                _localListView.Items.Add(item);
             }
-
-            _localTreeView.EndUpdate();
         }
         catch (UnauthorizedAccessException)
         {
-            e.Node.Nodes.Add(new TreeNode("Access Denied"));
+            StatusMessage = "Access denied to some folders";
         }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Error: {ex.Message}";
-        }
-        finally
-        {
-            _isLoadingLocal = false;
-        }
+
+        _localListView.EndUpdate();
+        StatusMessage = $"Local: {path}";
     }
 
-    private async void S3TreeView_BeforeExpand(object? sender, TreeViewCancelEventArgs e)
+    private void NavigateLocalUp()
     {
-        if (_isLoadingS3 || e.Node == null) return;
-        if (e.Node.Nodes.Count != 1 || e.Node.Nodes[0].Text != "Loading...") return;
+        var parent = Directory.GetParent(_localCurrentPath);
+        if (parent != null) LoadLocalFolder(parent.FullName);
+    }
 
-        _isLoadingS3 = true;
-        e.Node.Nodes.Clear();
-        var prefix = e.Node.Tag as string ?? "";
-
-        try
-        {
-            StatusMessage = "Loading S3 contents...";
-            var user = _authService.GetCurrentUser();
-            
-            if (user == null)
-            {
-                e.Node.Nodes.Add(new TreeNode("Not authenticated"));
-                return;
-            }
-
-            var items = await Task.Run(async () =>
-                await _s3Service.ListFilesAsync(user.Role, prefix));
-
-            _s3TreeView.BeginUpdate();
-            try
-            {
-                foreach (var item in items.Take(500))
-                {
-                    var displayText = item.IsDirectory 
-                        ? $"[DIR] {item.Name}" 
-                        : $"{item.Name} ({FormatFileSize(item.Size)})";
-                    
-                    var node = new TreeNode(displayText)
-                    {
-                        Tag = item.Path,
-                        ToolTipText = item.IsDirectory 
-                            ? item.Path 
-                            : $"Size: {FormatFileSize(item.Size)}\nModified: {item.LastModified:g}"
-                    };
-
-                    if (item.IsDirectory)
-                        node.Nodes.Add(new TreeNode("Loading..."));
-
-                    e.Node.Nodes.Add(node);
-                }
-            }
-            finally
-            {
-                _s3TreeView.EndUpdate();
-            }
-
-            StatusMessage = $"Loaded {items.Count} items";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Error: {ex.Message}";
-            e.Node.Nodes.Add(new TreeNode($"Error: {ex.Message}"));
-        }
-        finally
-        {
-            _isLoadingS3 = false;
-        }
+    private void LocalList_DoubleClick(object? sender, EventArgs e)
+    {
+        if (_localListView.SelectedItems.Count == 0) return;
+        var tag = _localListView.SelectedItems[0].Tag;
+        if (tag is DirectoryInfo dir)
+            LoadLocalFolder(dir.FullName);
+        else if (tag is FileInfo file)
+            Process.Start(new ProcessStartInfo { FileName = file.FullName, UseShellExecute = true });
     }
 
     #endregion
 
-    #region Sync Operations
+    // ══════════════════════════════════════════════════════════════════════
+    #region S3 pane — navigation & loading
+
+    private async Task LoadS3ListAsync(string prefix)
+    {
+        var user = _authService.GetCurrentUser();
+        if (user == null)
+        {
+            StatusMessage = "Not authenticated — please restart and log in";
+            return;
+        }
+
+        _isLoadingS3 = true;
+        try
+        {
+            var config = _configService.GetConfiguration();
+            _s3CurrentPrefix = prefix;
+            _txtS3Prefix.Text  = $"s3://{config.AWS.BucketName}/{prefix}";
+            _btnS3Up.Enabled   = !string.IsNullOrEmpty(prefix);
+
+            StatusMessage = $"Loading S3: /{prefix} …";
+            ProgressVisible = true;
+
+            var items = await Task.Run(() => _s3Service.ListFilesAsync(user.Role, prefix));
+
+            _s3ListView.BeginUpdate();
+            _s3ListView.Items.Clear();
+
+            // ".." entry
+            if (!string.IsNullOrEmpty(prefix))
+            {
+                var up = new ListViewItem("..") { Tag = GetParentPrefix(prefix), ForeColor = Color.DimGray };
+                up.SubItems.AddRange(new[] { "", "", "" });
+                _s3ListView.Items.Add(up);
+            }
+
+            foreach (var node in items.OrderBy(n => !n.IsDirectory).ThenBy(n => n.Name))
+            {
+                var icon = node.IsDirectory ? "📁" : "📄";
+                var lv   = new ListViewItem($"{icon}  {node.Name}") { Tag = node };
+                lv.SubItems.AddRange(new[]
+                {
+                    node.IsDirectory ? "—"  : FormatSize(node.Size),
+                    node.IsDirectory ? ""   : node.LastModified.ToString("g"),
+                    node.IsDirectory ? ""   : node.Path
+                });
+                lv.ToolTipText = node.IsDirectory
+                    ? $"Folder: {node.Path}"
+                    : $"Key: {node.Path}\nSize: {FormatSize(node.Size)}\nModified: {node.LastModified:g}";
+                _s3ListView.Items.Add(lv);
+            }
+
+            _s3ListView.EndUpdate();
+
+            var files   = items.Count(n => !n.IsDirectory);
+            var folders = items.Count(n => n.IsDirectory);
+            StatusMessage = $"S3:  {folders} folder(s),  {files} file(s)";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"S3 error: {ex.Message}";
+        }
+        finally
+        {
+            _isLoadingS3 = false;
+            ProgressVisible = false;
+        }
+    }
+
+    private async void S3List_DoubleClick(object? sender, EventArgs e)
+    {
+        if (_s3ListView.SelectedItems.Count == 0) return;
+        var tag = _s3ListView.SelectedItems[0].Tag;
+
+        if (tag is string upPrefix)
+        {
+            await LoadS3ListAsync(upPrefix);
+        }
+        else if (tag is FileNode node)
+        {
+            if (node.IsDirectory)
+            {
+                var childPrefix = node.Path.EndsWith("/") ? node.Path : node.Path + "/";
+                await LoadS3ListAsync(childPrefix);
+            }
+            else
+            {
+                var tempPath = Path.Combine(Path.GetTempPath(), node.Name);
+                await DownloadFileAsync(node.Path, tempPath);
+                Process.Start(new ProcessStartInfo { FileName = tempPath, UseShellExecute = true });
+            }
+        }
+    }
+
+    private async Task NavigateS3UpAsync() => await LoadS3ListAsync(GetParentPrefix(_s3CurrentPrefix));
+
+    private static string GetParentPrefix(string prefix)
+    {
+        var t = prefix.TrimEnd('/');
+        var i = t.LastIndexOf('/');
+        return i < 0 ? "" : t[..(i + 1)];
+    }
+
+    #endregion
+
+    // ══════════════════════════════════════════════════════════════════════
+    #region Sync
 
     private async Task PerformSyncAsync()
     {
-        if (string.IsNullOrEmpty(_localRootPath))
+        if (string.IsNullOrEmpty(_localCurrentPath))
         {
-            MessageBox.Show("Please select a local folder first.", "No Folder Selected",
+            MessageBox.Show("Browse to a local folder first.", "No Folder Selected",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         _currentOperationCts = new CancellationTokenSource();
-        var progress = new Progress<SyncProgress>(UpdateSyncProgress);
-
         try
         {
             _btnSync.Enabled = false;
+            ProgressVisible  = true;
+            StatusMessage    = "Calculating changes…";
+
+            var plan = await _syncEngine.CalculateChangesAsync(
+                _localCurrentPath, _s3CurrentPrefix, _currentOperationCts.Token);
+
+            if (plan.TotalOperations == 0 && !plan.HasConflicts)
+            {
+                StatusMessage = "Everything is up to date — nothing to sync.";
+                return;
+            }
+
+            using var preview = new SyncPreviewForm(plan);
+            if (preview.ShowDialog(this) != DialogResult.OK) { StatusMessage = "Sync cancelled."; return; }
+
+            var selected = preview.GetSelectedPlan();
+            if (selected.TotalOperations == 0) { StatusMessage = "No operations selected."; return; }
+
             _btnCancel.Visible = true;
-            ProgressVisible = true;
-            StatusMessage = "Calculating changes...";
-
-            var result = await _syncEngine.SyncAsync(
-                _localRootPath,
-                "",
-                ConflictPolicy.PromptUser,
-                progress,
-                _currentOperationCts.Token);
-
-            if (result.Success)
+            var progress = new Progress<SyncProgress>(p =>
             {
-                StatusMessage = $"Sync complete: {result.FilesUploaded} uploaded, " +
-                    $"{result.FilesDownloaded} downloaded, {result.FilesDeleted} deleted";
-            }
-            else
-            {
-                StatusMessage = $"Sync completed with {result.Errors} errors";
-                if (result.ErrorDetails.Any())
-                {
-                    ShowErrorSummary(result.ErrorDetails);
-                }
-            }
+                if (InvokeRequired) Invoke(() => ApplySyncProgress(p));
+                else ApplySyncProgress(p);
+            });
 
-            RefreshLocalTree();
-            RefreshS3Tree();
+            var result = await _syncEngine.ExecuteSyncAsync(selected, progress, _currentOperationCts.Token);
+
+            StatusMessage = result.Success
+                ? $"Sync complete ✓  {result.FilesUploaded} uploaded,  {result.FilesDownloaded} downloaded,  {result.FilesDeleted} deleted"
+                : $"Sync finished with {result.Errors} error(s)";
+
+            if (!result.Success && result.ErrorDetails.Any()) ShowErrorSummary(result.ErrorDetails);
+
+            LoadLocalFolder(_localCurrentPath);
+            await LoadS3ListAsync(_s3CurrentPrefix);
         }
-        catch (OperationCanceledException)
-        {
-            StatusMessage = "Sync cancelled";
-        }
+        catch (OperationCanceledException) { StatusMessage = "Sync cancelled"; }
         catch (Exception ex)
         {
             StatusMessage = $"Sync failed: {ex.Message}";
-            MessageBox.Show($"Sync failed:\n\n{ex.Message}", "Sync Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.Message, "Sync Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
-            _btnSync.Enabled = true;
+            _btnSync.Enabled   = true;
             _btnCancel.Visible = false;
-            ProgressVisible = false;
+            ProgressVisible    = false;
             _currentOperationCts = null;
         }
     }
 
-    private void UpdateSyncProgress(SyncProgress p)
+    private void ApplySyncProgress(SyncProgress p)
     {
-        if (InvokeRequired)
-        {
-            Invoke(() => UpdateSyncProgress(p));
-            return;
-        }
-
-        var percent = p.TotalOperations > 0 
-            ? (int)(p.CompletedOperations * 100.0 / p.TotalOperations) 
-            : 0;
-        ProgressValue = percent;
-        StatusMessage = $"{p.Phase}: {p.CurrentFile} ({p.CompletedOperations}/{p.TotalOperations})";
+        ProgressValue = p.TotalOperations > 0
+            ? (int)(p.CompletedOperations * 100.0 / p.TotalOperations) : 0;
+        StatusMessage = $"{p.Phase}: {p.CurrentFile}  ({p.CompletedOperations}/{p.TotalOperations})";
     }
 
     private void OnConflictsDetected(object? sender, ConflictEventArgs e)
     {
-        if (InvokeRequired)
+        if (InvokeRequired) { Invoke(() => OnConflictsDetected(sender, e)); return; }
+        using var dlg = new ConflictResolutionDialog(e.Conflicts);
+        if (dlg.ShowDialog(this) == DialogResult.OK) e.Handled = true;
+    }
+
+    #endregion
+
+    // ══════════════════════════════════════════════════════════════════════
+    #region Upload
+
+    private async void OnUploadSelected(object? sender, EventArgs e)
+    {
+        var files = GetCheckedLocalFiles();
+        if (!files.Any())
         {
-            Invoke(() => OnConflictsDetected(sender, e));
+            MessageBox.Show("Tick local files to upload.", "No Selection",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+        await UploadFilesAsync(files);
+    }
 
-        using var dialog = new ConflictResolutionDialog(e.Conflicts);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+    private async Task UploadFilesAsync(List<FileInfo> files)
+    {
+        var user = _authService.GetCurrentUser();
+        if (user == null) return;
+
+        _currentOperationCts = new CancellationTokenSource();
+        int done = 0, total = files.Count;
+        try
         {
-            e.Handled = true;
+            _btnUpload.Enabled = false;
+            _btnCancel.Visible = true;
+            ProgressVisible    = true;
+
+            foreach (var f in files)
+            {
+                if (_currentOperationCts.Token.IsCancellationRequested) break;
+                var key = _s3CurrentPrefix + f.Name;
+                SafeSetStatus($"Uploading  {f.Name}  ({done + 1}/{total})");
+                var prog = new Progress<double>(pct => SafeSetProgress((int)pct));
+                await _s3Service.UploadFileAsync(f.FullName, key,
+                    new List<UserRole> { user.Role }, prog, _currentOperationCts.Token);
+                done++;
+                SafeSetProgress(done * 100 / total);
+            }
+
+            StatusMessage = $"Uploaded {done}/{total} file(s)";
+            await LoadS3ListAsync(_s3CurrentPrefix);
+        }
+        catch (OperationCanceledException) { StatusMessage = $"Upload cancelled  ({done}/{total})"; }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Upload Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally
+        {
+            _btnCancel.Visible = false;
+            ProgressVisible    = false;
+            _currentOperationCts = null;
+            UpdateToolbarButtons();
         }
     }
 
     #endregion
 
-    #region Download Operations
+    // ══════════════════════════════════════════════════════════════════════
+    #region Download
 
     private async void OnDownloadSelected(object? sender, EventArgs e)
     {
-        var node = _s3TreeView.SelectedNode;
-        if (node?.Tag == null) return;
-
-        var s3Path = node.Tag.ToString()!;
-        
-        using var dialog = new SaveFileDialog
+        var nodes = GetCheckedS3Nodes().Where(n => !n.IsDirectory).ToList();
+        if (!nodes.Any())
         {
-            FileName = Path.GetFileName(s3Path),
-            Filter = "All Files|*.*"
-        };
+            MessageBox.Show("Tick S3 files to download.", "No Selection",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
 
-        if (dialog.ShowDialog() != DialogResult.OK) return;
+        var dest = _localCurrentPath;
+        if (string.IsNullOrEmpty(dest))
+        {
+            using var dlg = new FolderBrowserDialog { Description = "Select download destination" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            dest = dlg.SelectedPath;
+        }
 
-        await DownloadFileAsync(s3Path, dialog.FileName);
+        await DownloadNodesAsync(nodes, dest);
+    }
+
+    private async Task DownloadNodesAsync(List<FileNode> nodes, string destFolder)
+    {
+        _currentOperationCts = new CancellationTokenSource();
+        int done = 0, total = nodes.Count;
+        try
+        {
+            _btnDownload.Enabled = false;
+            _btnCancel.Visible   = true;
+            ProgressVisible      = true;
+
+            foreach (var node in nodes)
+            {
+                if (_currentOperationCts.Token.IsCancellationRequested) break;
+                var localPath = Path.Combine(destFolder, node.Name);
+                SafeSetStatus($"Downloading  {node.Name}  ({done + 1}/{total})");
+                var prog = new Progress<double>(pct => SafeSetProgress((int)pct));
+                await _s3Service.DownloadFileAsync(node.Path, localPath, prog, _currentOperationCts.Token);
+                done++;
+                SafeSetProgress(done * 100 / total);
+            }
+
+            StatusMessage = $"Downloaded {done}/{total} file(s)";
+            if (!string.IsNullOrEmpty(_localCurrentPath)) LoadLocalFolder(_localCurrentPath);
+        }
+        catch (OperationCanceledException) { StatusMessage = $"Download cancelled  ({done}/{total})"; }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Download Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally
+        {
+            _btnCancel.Visible   = false;
+            ProgressVisible      = false;
+            _currentOperationCts = null;
+            UpdateToolbarButtons();
+        }
     }
 
     private async void OnDownloadAsZip(object? sender, EventArgs e)
     {
-        var selectedPaths = GetSelectedS3Paths();
-        if (!selectedPaths.Any())
+        var nodes = GetCheckedS3Nodes().Where(n => !n.IsDirectory).ToList();
+        if (!nodes.Any()) { MessageBox.Show("Tick files to zip.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+
+        using var dlg = new SaveFileDialog { Filter = "ZIP|*.zip", FileName = "download.zip" };
+        if (dlg.ShowDialog() != DialogResult.OK) return;
+
+        _currentOperationCts = new CancellationTokenSource();
+        ProgressVisible = true;
+        try
         {
-            MessageBox.Show("Please select files to download.", "No Selection",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            var prog = new Progress<double>(pct => SafeSetProgress((int)pct));
+            await _s3Service.DownloadAsZipAsync(nodes.Select(n => n.Path), dlg.FileName,
+                prog, _currentOperationCts.Token);
+            StatusMessage = $"ZIP saved: {dlg.FileName}";
         }
-
-        using var dialog = new SaveFileDialog
-        {
-            FileName = "download.zip",
-            Filter = "ZIP Archive|*.zip"
-        };
-
-        if (dialog.ShowDialog() != DialogResult.OK) return;
-
-        await DownloadAsZipAsync(selectedPaths, dialog.FileName);
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally { ProgressVisible = false; _currentOperationCts = null; }
     }
 
     private async void OnDownloadFolder(object? sender, EventArgs e)
     {
-        var node = _s3TreeView.SelectedNode;
-        if (node?.Tag == null) return;
+        var folder = GetCheckedS3Nodes().FirstOrDefault(n => n.IsDirectory)
+                  ?? _s3ListView.SelectedItems.Cast<ListViewItem>()
+                                .Select(i => i.Tag as FileNode)
+                                .FirstOrDefault(n => n?.IsDirectory == true);
+        if (folder == null) { MessageBox.Show("Select an S3 folder.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
-        var s3Prefix = node.Tag.ToString()!;
-        if (!s3Prefix.EndsWith("/"))
-        {
-            MessageBox.Show("Please select a folder to download.", "Not a Folder",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
+        using var dlg = new FolderBrowserDialog { Description = "Select destination" };
+        if (dlg.ShowDialog() != DialogResult.OK) return;
 
-        using var dialog = new FolderBrowserDialog
-        {
-            Description = "Select destination folder"
-        };
-
-        if (dialog.ShowDialog() != DialogResult.OK) return;
-
-        await DownloadFolderAsync(s3Prefix, dialog.SelectedPath);
-    }
-
-    private async Task DownloadFileAsync(string s3Path, string localPath)
-    {
         _currentOperationCts = new CancellationTokenSource();
-        var progress = new Progress<double>(percent =>
-        {
-            SafeSetProgress((int)percent);
-            SafeSetStatus($"Downloading... {(int)percent}%");
-        });
-
+        ProgressVisible = true;
         try
         {
-            _btnCancel.Visible = true;
-            ProgressVisible = true;
-            await _s3Service.DownloadFileAsync(s3Path, localPath, progress, _currentOperationCts.Token);
-            StatusMessage = $"Downloaded: {Path.GetFileName(localPath)}";
-        }
-        catch (OperationCanceledException)
-        {
-            StatusMessage = "Download cancelled";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Download failed:\n\n{ex.Message}", "Download Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally
-        {
-            _btnCancel.Visible = false;
-            ProgressVisible = false;
-            _currentOperationCts = null;
-        }
-    }
-
-    private async Task DownloadAsZipAsync(List<string> s3Paths, string zipPath)
-    {
-        _currentOperationCts = new CancellationTokenSource();
-
-        try
-        {
-            _btnCancel.Visible = true;
-            ProgressVisible = true;
-            StatusMessage = $"Creating ZIP with {s3Paths.Count} files...";
-
-            await _s3Service.DownloadAsZipAsync(s3Paths, zipPath, null, _currentOperationCts.Token);
-
-            StatusMessage = $"Downloaded ZIP: {Path.GetFileName(zipPath)}";
-        }
-        catch (OperationCanceledException)
-        {
-            StatusMessage = "Download cancelled";
-            if (File.Exists(zipPath)) File.Delete(zipPath);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"ZIP download failed:\n\n{ex.Message}", "Download Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally
-        {
-            _btnCancel.Visible = false;
-            ProgressVisible = false;
-            _currentOperationCts = null;
-        }
-    }
-
-    private async Task DownloadFolderAsync(string s3Prefix, string localBasePath)
-    {
-        _currentOperationCts = new CancellationTokenSource();
-
-        try
-        {
-            _btnCancel.Visible = true;
-            ProgressVisible = true;
-            StatusMessage = "Downloading folder...";
-
-            await _s3Service.DownloadFolderAsync(s3Prefix, localBasePath, null, _currentOperationCts.Token);
-
+            var prog = new Progress<double>(pct => SafeSetProgress((int)pct));
+            await _s3Service.DownloadFolderAsync(folder.Path, dlg.SelectedPath, prog, _currentOperationCts.Token);
             StatusMessage = "Folder download complete";
+            if (!string.IsNullOrEmpty(_localCurrentPath)) LoadLocalFolder(_localCurrentPath);
         }
-        catch (OperationCanceledException)
-        {
-            StatusMessage = "Download cancelled";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Folder download failed:\n\n{ex.Message}", "Download Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally
-        {
-            _btnCancel.Visible = false;
-            ProgressVisible = false;
-            _currentOperationCts = null;
-        }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally { ProgressVisible = false; _currentOperationCts = null; }
     }
 
-    #endregion
-
-    #region Upload Operations
-
-    private async void OnUploadSelected(object? sender, EventArgs e)
+    private async Task DownloadFileAsync(string s3Key, string localPath)
     {
-        var selectedPaths = GetSelectedLocalPaths();
-        if (!selectedPaths.Any())
-        {
-            MessageBox.Show("Please select files to upload.", "No Selection",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        var destPrefix = _s3TreeView.SelectedNode?.Tag?.ToString() ?? "";
-        if (!destPrefix.EndsWith("/") && !string.IsNullOrEmpty(destPrefix))
-            destPrefix += "/";
-
-        await UploadFilesAsync(selectedPaths, destPrefix);
-    }
-
-    private async Task UploadFilesAsync(List<string> localPaths, string s3Prefix)
-    {
-        _currentOperationCts = new CancellationTokenSource();
-        var user = _authService.GetCurrentUser();
-        if (user == null) return;
-
-        var uploaded = 0;
-        var total = localPaths.Count;
-
+        ProgressVisible = true;
         try
         {
-            _btnCancel.Visible = true;
-            ProgressVisible = true;
-
-            foreach (var localPath in localPaths)
-            {
-                if (_currentOperationCts.Token.IsCancellationRequested) break;
-
-                var fileName = Path.GetFileName(localPath);
-                var s3Key = s3Prefix + fileName;
-
-                SafeSetStatus($"Uploading ({uploaded + 1}/{total}): {fileName}");
-
-                await _s3Service.UploadFileAsync(
-                    localPath, s3Key,
-                    new List<UserRole> { user.Role },
-                    null, _currentOperationCts.Token);
-
-                uploaded++;
-                SafeSetProgress(uploaded * 100 / total);
-            }
-
-            StatusMessage = $"Uploaded {uploaded} files";
-            RefreshS3Tree();
+            var prog = new Progress<double>(pct => SafeSetProgress((int)pct));
+            await _s3Service.DownloadFileAsync(s3Key, localPath, prog);
         }
-        catch (OperationCanceledException)
-        {
-            StatusMessage = $"Upload cancelled ({uploaded}/{total} completed)";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Upload failed:\n\n{ex.Message}", "Upload Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally
-        {
-            _btnCancel.Visible = false;
-            ProgressVisible = false;
-            _currentOperationCts = null;
-        }
+        finally { ProgressVisible = false; }
     }
 
     #endregion
 
-    #region Drag and Drop
-
-    private void S3TreeView_DragEnter(object? sender, DragEventArgs e)
-    {
-        if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
-        {
-            e.Effect = DragDropEffects.Copy;
-        }
-    }
-
-    private async void S3TreeView_DragDrop(object? sender, DragEventArgs e)
-    {
-        if (e.Data?.GetData(DataFormats.FileDrop) is not string[] files) return;
-
-        var destPrefix = "";
-        var targetPoint = _s3TreeView.PointToClient(new Point(e.X, e.Y));
-        var targetNode = _s3TreeView.GetNodeAt(targetPoint);
-        
-        if (targetNode?.Tag is string tag && tag.EndsWith("/"))
-            destPrefix = tag;
-
-        await UploadFilesAsync(files.ToList(), destPrefix);
-    }
-
-    #endregion
-
-    #region Context Menu Actions
-
-    private void OnOpenInExplorer(object? sender, EventArgs e)
-    {
-        var node = _localTreeView.SelectedNode;
-        if (node?.Tag is DirectoryInfo dir)
-        {
-            System.Diagnostics.Process.Start("explorer.exe", dir.FullName);
-        }
-        else if (node?.Tag is FileInfo file)
-        {
-            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{file.FullName}\"");
-        }
-    }
-
-    private void OnExcludeFromSync(object? sender, EventArgs e)
-    {
-        var node = _localTreeView.SelectedNode;
-        if (node?.Tag == null) return;
-
-        var path = node.Tag switch
-        {
-            DirectoryInfo dir => dir.Name + "/**",
-            FileInfo file => file.Name,
-            _ => null
-        };
-
-        if (path != null)
-        {
-            MessageBox.Show($"Added to exclusions: {path}\n\nThis will be skipped during sync.",
-                "Excluded", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    #region S3 mutations
 
     private async void OnDeleteFromS3(object? sender, EventArgs e)
     {
-        var paths = GetSelectedS3Paths();
-        if (!paths.Any()) return;
-
-        var result = MessageBox.Show(
-            $"Delete {paths.Count} item(s) from S3?\n\nThis cannot be undone.",
-            "Confirm Delete",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Warning);
-
-        if (result != DialogResult.Yes) return;
-
+        var nodes = GetCheckedS3Nodes().Where(n => !n.IsDirectory).ToList();
+        if (!nodes.Any()) { MessageBox.Show("Tick files to delete.", "No Selection", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (MessageBox.Show($"Delete {nodes.Count} file(s) from S3?", "Confirm Delete",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        ProgressVisible = true;
         try
         {
-            StatusMessage = "Deleting...";
-            await _s3Service.DeleteFilesAsync(paths);
-            StatusMessage = $"Deleted {paths.Count} items";
-            RefreshS3Tree();
+            await _s3Service.DeleteFilesAsync(nodes.Select(n => n.Path), CancellationToken.None);
+            StatusMessage = $"Deleted {nodes.Count} file(s)";
+            await LoadS3ListAsync(_s3CurrentPrefix);
         }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Delete failed:\n\n{ex.Message}", "Delete Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally { ProgressVisible = false; }
     }
 
     private async void OnCopyS3Url(object? sender, EventArgs e)
     {
-        var node = _s3TreeView.SelectedNode;
-        if (node?.Tag == null) return;
+        var node = _s3ListView.SelectedItems.Cast<ListViewItem>()
+                              .Select(i => i.Tag as FileNode)
+                              .FirstOrDefault(n => n != null && !n.IsDirectory);
+        if (node == null) return;
+        var url = await _s3Service.GetPresignedUrlAsync(node.Path, TimeSpan.FromHours(1));
+        if (url != null) { Clipboard.SetText(url); StatusMessage = "Presigned URL copied (expires 1h)"; }
+    }
 
-        var s3Path = node.Tag.ToString()!;
-        
-        try
-        {
-            var url = await _s3Service.GetPresignedUrlAsync(s3Path, TimeSpan.FromHours(24));
-            if (url != null)
+    #endregion
+
+    // ══════════════════════════════════════════════════════════════════════
+    #region Context menu helpers
+
+    private void OnOpenInExplorer(object? sender, EventArgs e)
+    {
+        var path = _localListView.SelectedItems.Count > 0
+            ? _localListView.SelectedItems[0].Tag switch
             {
-                Clipboard.SetText(url);
-                StatusMessage = "S3 URL copied to clipboard (valid 24 hours)";
+                FileInfo f    => f.DirectoryName!,
+                DirectoryInfo d => d.FullName,
+                _ => _localCurrentPath
             }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Failed to generate URL: {ex.Message}";
-        }
+            : _localCurrentPath;
+        if (!string.IsNullOrEmpty(path)) Process.Start("explorer.exe", path);
     }
 
     private void OnShowLocalProperties(object? sender, EventArgs e)
     {
-        var node = _localTreeView.SelectedNode;
-        if (node?.Tag is FileInfo file)
+        if (_localListView.SelectedItems.Count == 0) return;
+        var info = _localListView.SelectedItems[0].Tag switch
         {
-            MessageBox.Show(
-                $"Name: {file.Name}\nPath: {file.FullName}\nSize: {FormatFileSize(file.Length)}\n" +
-                $"Created: {file.CreationTime:g}\nModified: {file.LastWriteTime:g}",
-                "File Properties", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
+            FileInfo f      => $"Name: {f.Name}\nSize: {FormatSize(f.Length)}\nModified: {f.LastWriteTime:g}\nPath: {f.FullName}",
+            DirectoryInfo d => $"Name: {d.Name}\nModified: {d.LastWriteTime:g}\nPath: {d.FullName}",
+            _ => ""
+        };
+        if (!string.IsNullOrEmpty(info))
+            MessageBox.Show(info, "Properties", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void OnShowS3Properties(object? sender, EventArgs e)
     {
-        var node = _s3TreeView.SelectedNode;
-        if (node?.Tag != null)
-        {
-            var path = node.Tag.ToString()!;
+        if (_s3ListView.SelectedItems.Count == 0) return;
+        if (_s3ListView.SelectedItems[0].Tag is FileNode n)
             MessageBox.Show(
-                $"S3 Key: {path}\nBucket: {_configService.GetConfiguration().AWS.BucketName}",
-                "S3 Object Properties", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
+                $"Name: {n.Name}\nKey: {n.Path}\nSize: {FormatSize(n.Size)}\nModified: {n.LastModified:g}\nVersion: {n.VersionId}",
+                "Properties", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     #endregion
 
-    #region UI Helpers
+    // ══════════════════════════════════════════════════════════════════════
+    #region Selection helpers
 
-    private void SafeSetStatus(string value)
+    private List<FileInfo> GetCheckedLocalFiles()
     {
-        if (InvokeRequired)
-            Invoke(() => _statusLabel.Text = value);
-        else
-            _statusLabel.Text = value;
+        var list = new List<FileInfo>();
+        foreach (ListViewItem item in _localListView.CheckedItems)
+            if (item.Tag is FileInfo f) list.Add(f);
+        return list;
     }
 
-    private void SafeSetProgress(int value)
+    private List<FileNode> GetCheckedS3Nodes()
     {
-        if (InvokeRequired)
-            Invoke(() => _progressBar.Value = Math.Min(value, 100));
-        else
-            _progressBar.Value = Math.Min(value, 100);
+        var list = new List<FileNode>();
+        foreach (ListViewItem item in _s3ListView.CheckedItems)
+            if (item.Tag is FileNode n) list.Add(n);
+        return list;
     }
 
-    private void SafeSetProgressVisible(bool value)
-    {
-        if (InvokeRequired)
-            Invoke(() => _progressBar.Visible = value);
-        else
-            _progressBar.Visible = value;
-    }
+    #endregion
 
-    private void BrowseForLocalFolder()
-    {
-        using var dialog = new FolderBrowserDialog { Description = "Select folder to sync with S3" };
-        if (dialog.ShowDialog() == DialogResult.OK)
-        {
-            _localRootPath = dialog.SelectedPath;
-            _txtLocalPath.Text = _localRootPath;
-            LocalPathSelected?.Invoke(this, _localRootPath);
-        }
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    #region Utility
 
-    private void RefreshLocalTree()
-    {
-        _localTreeView.Nodes.Clear();
-        InitializeTrees();
-    }
-
-    private void RefreshS3Tree()
-    {
-        var rootNode = _s3TreeView.Nodes[0];
-        rootNode.Nodes.Clear();
-        rootNode.Nodes.Add(new TreeNode("Loading..."));
-        rootNode.Collapse();
-        rootNode.Expand();
-    }
-
-    private void ShowSettingsDialog()
-    {
-        MessageBox.Show("Settings dialog - configure sync options, bandwidth, exclusions",
+    private void ShowSettingsDialog() =>
+        MessageBox.Show(
+            "Configure sync options, bandwidth throttling, and file exclusions.",
             "Settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
 
     private void CancelCurrentOperation()
     {
         _currentOperationCts?.Cancel();
-    }
-
-    private List<string> GetSelectedLocalPaths()
-    {
-        var paths = new List<string>();
-        CollectCheckedNodes(_localTreeView.Nodes, paths, true);
-        return paths;
-    }
-
-    private List<string> GetSelectedS3Paths()
-    {
-        var paths = new List<string>();
-        CollectCheckedNodes(_s3TreeView.Nodes, paths, false);
-        return paths;
-    }
-
-    private void CollectCheckedNodes(TreeNodeCollection nodes, List<string> paths, bool isLocal)
-    {
-        foreach (TreeNode node in nodes)
-        {
-            if (node.Checked && node.Tag != null)
-            {
-                if (isLocal)
-                {
-                    var path = node.Tag switch
-                    {
-                        FileInfo file => file.FullName,
-                        DirectoryInfo dir => dir.FullName,
-                        _ => null
-                    };
-                    if (path != null) paths.Add(path);
-                }
-                else
-                {
-                    paths.Add(node.Tag.ToString()!);
-                }
-            }
-            CollectCheckedNodes(node.Nodes, paths, isLocal);
-        }
-    }
-
-    private void LocalTreeView_DoubleClick(object? sender, TreeNodeMouseClickEventArgs e)
-    {
-        if (e.Node?.Tag is FileInfo file)
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = file.FullName,
-                UseShellExecute = true
-            });
-        }
-    }
-
-    private async void S3TreeView_DoubleClick(object? sender, TreeNodeMouseClickEventArgs e)
-    {
-        if (e.Node?.Tag == null) return;
-        var path = e.Node.Tag.ToString()!;
-        if (path.EndsWith("/")) return;
-
-        var tempPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(path));
-        await DownloadFileAsync(path, tempPath);
-
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = tempPath,
-            UseShellExecute = true
-        });
+        StatusMessage = "Cancelling…";
     }
 
     private void ShowErrorSummary(List<SyncError> errors)
     {
-        var summary = string.Join("\n", errors.Take(10).Select(e => $"- {e.FilePath}: {e.Message}"));
-        if (errors.Count > 10) summary += $"\n... and {errors.Count - 10} more";
-        MessageBox.Show($"Some files failed:\n\n{summary}", "Sync Errors", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        var msg = string.Join("\n", errors.Take(10).Select(err => $"• {err.FilePath}: {err.Message}"));
+        if (errors.Count > 10) msg += $"\n…and {errors.Count - 10} more";
+        MessageBox.Show($"Some files failed:\n\n{msg}", "Sync Errors", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
-    private static string FormatFileSize(long bytes)
+    private static string FormatSize(long bytes)
     {
-        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
-        int order = 0;
-        double size = bytes;
-        while (size >= 1024 && order < sizes.Length - 1) { order++; size /= 1024; }
-        return $"{size:0.##} {sizes[order]}";
+        string[] u = { "B", "KB", "MB", "GB", "TB" };
+        int i = 0; double v = bytes;
+        while (v >= 1024 && i < u.Length - 1) { i++; v /= 1024; }
+        return $"{v:0.##} {u[i]}";
+    }
+
+    private void SafeSetStatus(string text)
+    {
+        if (InvokeRequired) Invoke(() => _statusLabel.Text = text);
+        else _statusLabel.Text = text;
+    }
+
+    private void SafeSetProgress(int value)
+    {
+        if (InvokeRequired) Invoke(() => _progressBar.Value = Math.Clamp(value, 0, 100));
+        else _progressBar.Value = Math.Clamp(value, 0, 100);
+    }
+
+    private void SafeSetProgressVisible(bool visible)
+    {
+        if (InvokeRequired) Invoke(() => _progressBar.Visible = visible);
+        else _progressBar.Visible = visible;
     }
 
     #endregion
 
+    // ══════════════════════════════════════════════════════════════════════
     #region IFileSyncView
 
-    public void UpdateLocalTree(List<FileNode> nodes) => RefreshLocalTree();
-    public void UpdateRemoteTree(List<FileNode> nodes) => RefreshLocalTree();
-    public void ShowProgress(string message, int percentage) { SafeSetStatus(message); SafeSetProgress(percentage); }
-    public void ShowConflictDialog(List<ConflictInfo> conflicts)
+    public void UpdateLocalTree(List<FileNode> nodes) => LoadLocalFolder(_localCurrentPath);
+    public void UpdateRemoteTree(List<FileNode> nodes) => _ = LoadS3ListAsync(_s3CurrentPrefix);
+    public void ShowProgress(string message, int percentage)
     {
-        if (InvokeRequired) { Invoke(() => ShowConflictDialog(conflicts)); return; }
-        using var dialog = new ConflictResolutionDialog(conflicts);
-        dialog.ShowDialog(this);
+        SafeSetStatus(message);
+        SafeSetProgress(percentage);
     }
 
     #endregion
 }
 
-/// <summary>
-/// Dialog for resolving file conflicts
-/// </summary>
+// ══════════════════════════════════════════════════════════════════════════
+/// <summary>Dialog for resolving file conflicts</summary>
 public class ConflictResolutionDialog : Form
 {
     private readonly List<ConflictInfo> _conflicts;
@@ -1076,51 +1015,51 @@ public class ConflictResolutionDialog : Form
     private void InitializeComponent()
     {
         Text = "Resolve Conflicts";
-        Width = 800; Height = 500;
+        Width = 820; Height = 520;
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
 
         var label = new Label
         {
-            Text = $"{_conflicts.Count} file(s) modified on both sides. Choose resolution:",
-            Location = new Point(10, 10), Size = new Size(760, 40)
+            Text = $"{_conflicts.Count} file(s) modified on both sides. Choose a resolution for each:",
+            Location = new Point(10, 10), Size = new Size(780, 40)
         };
 
         _grid = new DataGridView
         {
-            Location = new Point(10, 60), Size = new Size(760, 340),
+            Location = new Point(10, 55), Size = new Size(780, 360),
             AutoGenerateColumns = false, AllowUserToAddRows = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect
         };
-
         _grid.Columns.AddRange(new DataGridViewColumn[]
         {
-            new DataGridViewTextBoxColumn { HeaderText = "File", Width = 250, DataPropertyName = "FileName" },
-            new DataGridViewTextBoxColumn { HeaderText = "Local Modified", Width = 130, DataPropertyName = "LocalModified" },
+            new DataGridViewTextBoxColumn { HeaderText = "File",            Width = 240, DataPropertyName = "FileName" },
+            new DataGridViewTextBoxColumn { HeaderText = "Local Modified",  Width = 130, DataPropertyName = "LocalModified" },
             new DataGridViewTextBoxColumn { HeaderText = "Remote Modified", Width = 130, DataPropertyName = "RemoteModified" },
-            new DataGridViewComboBoxColumn { HeaderText = "Resolution", Width = 150, DataPropertyName = "Resolution",
-                Items = { "Keep Local", "Keep Remote", "Keep Both", "Skip" } }
+            new DataGridViewComboBoxColumn
+            {
+                HeaderText = "Resolution", Width = 160, DataPropertyName = "Resolution",
+                Items = { "Keep Local", "Keep Remote", "Keep Both", "Skip" }
+            }
         });
 
-        var btnApply = new Button { Text = "Apply", Location = new Point(610, 420), Size = new Size(80, 30), DialogResult = DialogResult.OK };
-        var btnCancel = new Button { Text = "Cancel", Location = new Point(700, 420), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
-
+        var btnApply  = new Button { Text = "Apply",  Location = new Point(625, 430), Size = new Size(80, 30), DialogResult = DialogResult.OK };
+        var btnCancel = new Button { Text = "Cancel", Location = new Point(715, 430), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
         Controls.AddRange(new Control[] { label, _grid, btnApply, btnCancel });
         AcceptButton = btnApply; CancelButton = btnCancel;
     }
 
     private void LoadConflicts()
     {
-        var list = _conflicts.Select(c => new ConflictViewModel
+        _grid.DataSource = _conflicts.Select(c => new ConflictViewModel
         {
-            FileName = Path.GetFileName(c.LocalPath),
-            LocalModified = c.LocalModified.ToString("g"),
+            FileName       = Path.GetFileName(c.LocalPath),
+            LocalModified  = c.LocalModified.ToString("g"),
             RemoteModified = c.RemoteModified.ToString("g"),
-            Resolution = "Keep Local",
-            Conflict = c
+            Resolution     = "Keep Local",
+            Conflict       = c
         }).ToList();
-        _grid.DataSource = list;
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -1128,25 +1067,23 @@ public class ConflictResolutionDialog : Form
         if (DialogResult == DialogResult.OK && _grid.DataSource is List<ConflictViewModel> list)
         {
             foreach (var row in list)
-            {
                 row.Conflict.Resolution = row.Resolution switch
                 {
-                    "Keep Local" => ConflictResolution.KeepLocal,
-                    "Keep Remote" => ConflictResolution.KeepRemote,
-                    "Keep Both" => ConflictResolution.KeepBoth,
-                    _ => ConflictResolution.Skip
+                    "Keep Local"   => ConflictResolution.KeepLocal,
+                    "Keep Remote"  => ConflictResolution.KeepRemote,
+                    "Keep Both"    => ConflictResolution.KeepBoth,
+                    _              => ConflictResolution.Skip
                 };
-            }
         }
         base.OnFormClosing(e);
     }
 
     private class ConflictViewModel
     {
-        public string FileName { get; set; } = "";
-        public string LocalModified { get; set; } = "";
-        public string RemoteModified { get; set; } = "";
-        public string Resolution { get; set; } = "";
-        public ConflictInfo Conflict { get; set; } = null!;
+        public string       FileName       { get; set; } = "";
+        public string       LocalModified  { get; set; } = "";
+        public string       RemoteModified { get; set; } = "";
+        public string       Resolution     { get; set; } = "";
+        public ConflictInfo Conflict       { get; set; } = null!;
     }
 }
