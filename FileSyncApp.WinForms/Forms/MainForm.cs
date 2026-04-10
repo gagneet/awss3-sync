@@ -128,8 +128,9 @@ public partial class MainForm : KryptonForm, IFileSyncView
         toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnRefresh, _btnSettings, _btnCancel });
 
         // ── Split container ─────────────────────────────────────────────
-        // SplitterDistance must NOT be set here — the form has no size yet.
-        // It is set to 50 % in OnShown after layout is complete.
+        // Never set SplitterDistance during construction — the container has
+        // no real width until the WM_SIZE message arrives after Show().
+        // Subscribe to SizeChanged and set 50 % exactly once.
         _split = new SplitContainer
         {
             Dock          = DockStyle.Fill,
@@ -138,6 +139,18 @@ public partial class MainForm : KryptonForm, IFileSyncView
             Panel1MinSize = 320,
             Panel2MinSize = 320
         };
+
+        EventHandler? setOnce = null;
+        setOnce = (_, _) =>
+        {
+            int needed = _split.Panel1MinSize + _split.Panel2MinSize + _split.SplitterWidth;
+            if (_split.Width > needed)
+            {
+                _split.SplitterDistance = _split.Width / 2;
+                _split.SizeChanged -= setOnce;   // one-shot: never fires again
+            }
+        };
+        _split.SizeChanged += setOnce;
 
         _split.Panel1.Controls.Add(BuildLocalPane());
         _split.Panel2.Controls.Add(BuildS3Pane());
@@ -381,8 +394,6 @@ public partial class MainForm : KryptonForm, IFileSyncView
     protected override async void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        // Set splitter to 50 % now that the form has a real width
-        _split.SplitterDistance = Math.Max(_split.Panel1MinSize, _split.Width / 2);
         await LoadS3ListAsync("");
     }
 
