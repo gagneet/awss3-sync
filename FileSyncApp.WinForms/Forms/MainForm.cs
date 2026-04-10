@@ -83,11 +83,10 @@ public partial class MainForm : KryptonForm, IFileSyncView
 
     private void BuildUI()
     {
-        Text            = "FileSyncApp – S3 Document Manager";
-        Size            = new Size(1440, 900);
-        MinimumSize     = new Size(960, 600);
-        StartPosition   = FormStartPosition.CenterScreen;
-        WindowState     = FormWindowState.Maximized;
+        Text          = "FileSyncApp – S3 Document Manager";
+        Size          = new Size(1400, 860);
+        MinimumSize   = new Size(800, 500);
+        StartPosition = FormStartPosition.CenterScreen;
 
         // ── Toolbar ─────────────────────────────────────────────────────
         var toolbar = new Panel
@@ -128,29 +127,18 @@ public partial class MainForm : KryptonForm, IFileSyncView
         toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnRefresh, _btnSettings, _btnCancel });
 
         // ── Split container ─────────────────────────────────────────────
-        // Never set SplitterDistance during construction — the container has
-        // no real width until the WM_SIZE message arrives after Show().
-        // Subscribe to SizeChanged and set 50 % exactly once.
+        // Keep min sizes small so the [Panel1MinSize, Width-Panel2MinSize]
+        // constraint is never violated during resize transitions.
+        // SplitterDistance is set to 50 % via BeginInvoke in OnLoad, which
+        // runs after all WM_SIZE messages have been processed.
         _split = new SplitContainer
         {
             Dock          = DockStyle.Fill,
             Orientation   = Orientation.Vertical,
             SplitterWidth = 5,
-            Panel1MinSize = 320,
-            Panel2MinSize = 320
+            Panel1MinSize = 100,
+            Panel2MinSize = 100
         };
-
-        EventHandler? setOnce = null;
-        setOnce = (_, _) =>
-        {
-            int needed = _split.Panel1MinSize + _split.Panel2MinSize + _split.SplitterWidth;
-            if (_split.Width > needed)
-            {
-                _split.SplitterDistance = _split.Width / 2;
-                _split.SizeChanged -= setOnce;   // one-shot: never fires again
-            }
-        };
-        _split.SizeChanged += setOnce;
 
         _split.Panel1.Controls.Add(BuildLocalPane());
         _split.Panel2.Controls.Add(BuildS3Pane());
@@ -389,6 +377,18 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _s3ListView.DragDrop    += (s, e) => OnUploadSelected(s, EventArgs.Empty);
 
         _syncEngine.ConflictsDetected += OnConflictsDetected;
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        // BeginInvoke posts to the message queue and runs after all pending
+        // WM_SIZE / layout messages, so _split.Width is guaranteed non-zero.
+        BeginInvoke(() =>
+        {
+            if (_split.Width > 0)
+                _split.SplitterDistance = _split.Width / 2;
+        });
     }
 
     protected override async void OnShown(EventArgs e)
