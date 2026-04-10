@@ -42,6 +42,9 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private KryptonLabel       _statusLabel = null!;
     private KryptonProgressBar _progressBar = null!;
 
+    // ── Layout ────────────────────────────────────────────────────────────
+    private SplitContainer _split = null!;
+
     // ── State ─────────────────────────────────────────────────────────────
     private string                   _localCurrentPath  = string.Empty;
     private string                   _s3CurrentPrefix   = string.Empty;
@@ -125,18 +128,19 @@ public partial class MainForm : KryptonForm, IFileSyncView
         toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnRefresh, _btnSettings, _btnCancel });
 
         // ── Split container ─────────────────────────────────────────────
-        var split = new SplitContainer
+        // SplitterDistance must NOT be set here — the form has no size yet.
+        // It is set to 50 % in OnShown after layout is complete.
+        _split = new SplitContainer
         {
-            Dock             = DockStyle.Fill,
-            Orientation      = Orientation.Vertical,
-            SplitterWidth    = 5,
-            SplitterDistance = 680,
-            Panel1MinSize    = 320,
-            Panel2MinSize    = 320
+            Dock          = DockStyle.Fill,
+            Orientation   = Orientation.Vertical,
+            SplitterWidth = 5,
+            Panel1MinSize = 320,
+            Panel2MinSize = 320
         };
 
-        split.Panel1.Controls.Add(BuildLocalPane());
-        split.Panel2.Controls.Add(BuildS3Pane());
+        _split.Panel1.Controls.Add(BuildLocalPane());
+        _split.Panel2.Controls.Add(BuildS3Pane());
 
         // ── Status bar ──────────────────────────────────────────────────
         var statusBar = new Panel
@@ -161,7 +165,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
         };
         statusBar.Controls.AddRange(new Control[] { _statusLabel, _progressBar });
 
-        Controls.Add(split);
+        Controls.Add(_split);
         Controls.Add(toolbar);
         Controls.Add(statusBar);
     }
@@ -377,6 +381,8 @@ public partial class MainForm : KryptonForm, IFileSyncView
     protected override async void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        // Set splitter to 50 % now that the form has a real width
+        _split.SplitterDistance = Math.Max(_split.Panel1MinSize, _split.Width / 2);
         await LoadS3ListAsync("");
     }
 
