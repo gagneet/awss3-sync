@@ -35,7 +35,7 @@ static class Program
 
                 // Specific Auth Implementations
                 services.AddSingleton<CognitoAuthService>();
-                services.AddSingleton<LocalAuthService>();
+                services.AddSingleton<LocalAuthService>(_ => new LocalAuthService("users.json"));
 
                 // Unified Auth Service
                 services.AddSingleton<IAuthService>(sp =>
@@ -44,6 +44,8 @@ static class Program
                         sp.GetRequiredService<LocalAuthService>()));
 
                 services.AddSingleton<IFileStorageService, S3FileStorageService>();
+                services.AddSingleton<MetadataCache>(sp =>
+                    new MetadataCache("sync_metadata.db", sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<MetadataCache>>()));
                 services.AddSingleton<ISyncEngine, SyncEngine>();
 
                 services.AddTransient<MainForm>();

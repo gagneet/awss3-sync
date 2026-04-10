@@ -32,8 +32,8 @@ public partial class LoginForm : KryptonForm
         var panel = new KryptonPanel { Dock = DockStyle.Fill };
 
         var lblMode = new KryptonLabel { Text = "Login Mode:", Location = new Point(50, 30), StateCommon = { ShortText = { Font = new Font("Segoe UI", 10, FontStyle.Bold) } } };
-        _rbCognito = new KryptonRadioButton { Text = "AWS Cognito (Secure Online Auth)", Location = new Point(180, 30), Checked = true };
-        _rbLocal = new KryptonRadioButton { Text = "Local Login (Offline Fallback)", Location = new Point(180, 60) };
+        _rbCognito = new KryptonRadioButton { Text = "AWS Cognito (Secure Online Auth)", Location = new Point(180, 30) };
+        _rbLocal = new KryptonRadioButton { Text = "Local Login (Offline Fallback)", Location = new Point(180, 60), Checked = true };
 
         var lblUser = new KryptonLabel { Text = "Username:", Location = new Point(50, 110) };
         _txtUsername = new KryptonTextBox { Location = new Point(180, 110), Width = 250 };
