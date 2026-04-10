@@ -207,6 +207,68 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         }
     }
 
+    public async Task<List<FileNode>> ListAllFilesRecursiveAsync(UserRole userRole, string prefix = "", CancellationToken cancellationToken = default)
+    {
+        var client = GetClient();
+        var config = _configService.GetConfiguration();
+        var bucketName = config.AWS.BucketName;
+        var files = new List<FileNode>();
+        string? continuationToken = null;
+
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        try
+        {
+            do
+            {
+                // No Delimiter — returns every object at every depth below prefix
+                var request = new ListObjectsV2Request
+                {
+                    BucketName        = bucketName,
+                    Prefix            = prefix,
+                    ContinuationToken = continuationToken,
+                    MaxKeys           = 1000
+                };
+
+                var response = await client.ListObjectsV2Async(request, linkedCts.Token);
+
+                if (response.S3Objects != null)
+                {
+                    foreach (var obj in response.S3Objects)
+                    {
+                        if (obj == null || obj.Key == prefix || obj.Key.EndsWith("/")) continue;
+                        var fileName = Path.GetFileName(obj.Key);
+                        if (string.IsNullOrEmpty(fileName)) continue;
+
+                        var node = new FileNode(
+                            fileName,
+                            obj.Key,
+                            false,
+                            obj.Size ?? 0,
+                            obj.LastModified ?? DateTime.MinValue,
+                            new List<UserRole> { UserRole.Administrator, UserRole.Executive, UserRole.User });
+
+                        if (CanUserAccessFile(userRole, node))
+                            files.Add(node);
+                    }
+                }
+
+                continuationToken = response.NextContinuationToken;
+                if (!string.IsNullOrEmpty(continuationToken))
+                    await Task.Yield();
+
+            } while (!string.IsNullOrEmpty(continuationToken) && !linkedCts.Token.IsCancellationRequested);
+
+            return files;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            _logger.LogWarning("Recursive S3 listing timed out");
+            throw new TimeoutException("S3 recursive listing timed out. Please check your network connection.");
+        }
+    }
+
     public async Task<bool> UploadFileAsync(string filePath, string key, List<UserRole> accessRoles, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         await _transferSemaphore.WaitAsync(cancellationToken);
