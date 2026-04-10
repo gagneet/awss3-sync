@@ -7,6 +7,23 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
+
+    <!-- Product identity -->
+    <AssemblyName>FileSyncApp</AssemblyName>
+    <RootNamespace>FileSyncApp.WinForms</RootNamespace>
+    <Product>AWS S3 File Sync</Product>
+    <Company>gagneet</Company>
+    <Copyright>Copyright © 2025</Copyright>
+    <Description>Bidirectional file sync between local folders and AWS S3</Description>
+
+    <!-- Version — overridable at publish time: dotnet publish -p:Version=1.2.3 -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+
+    <!-- DPI awareness — handled by .NET runtime (do NOT also set in app.manifest) -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
   <ItemGroup>
