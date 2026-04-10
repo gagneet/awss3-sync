@@ -1,23 +1,30 @@
 using FileSyncApp.Core.Interfaces;
 using FileSyncApp.Core.Models;
 using FileSyncApp.Core.Services;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
 namespace FileSyncApp.Tests;
 
-public class SyncEngineTests
+public class SyncEngineTests : IDisposable
 {
     private readonly Mock<IFileStorageService> _mockStorage;
-    private readonly Mock<IDatabaseService> _mockDb;
+    private readonly Mock<IAuthService> _mockAuth;
+    private readonly MetadataCache _metadataCache;
     private readonly SyncEngine _engine;
 
     public SyncEngineTests()
     {
         _mockStorage = new Mock<IFileStorageService>();
-        _mockDb = new Mock<IDatabaseService>();
-        _engine = new SyncEngine(_mockStorage.Object, _mockDb.Object);
+        _mockAuth = new Mock<IAuthService>();
+        var cacheLogger = new Mock<ILogger<MetadataCache>>().Object;
+        var engineLogger = new Mock<ILogger<SyncEngine>>().Object;
+        _metadataCache = new MetadataCache(":memory:", cacheLogger);
+        _engine = new SyncEngine(_mockStorage.Object, _mockAuth.Object, _metadataCache, engineLogger);
     }
+
+    public void Dispose() => _metadataCache.Dispose();
 
     [Fact]
     public void ResolveBidirectional_NoChanges_ReturnsSkip()
@@ -125,18 +132,21 @@ public class SyncEngineTests
 
         try
         {
-            _mockDb.Setup(d => d.GetSnapshots()).Returns(new List<SnapshotEntry> {
-                new SnapshotEntry("test.txt", 100, now, "", "")
-            });
+            // Pre-populate snapshot with a file that no longer exists locally or remotely
+            await _metadataCache.UpdateRecordAsync(localPath, "test.txt", 100, now);
+
+            _mockAuth.Setup(a => a.GetCurrentUser())
+                .Returns(new UnifiedUser { Username = "test", Role = UserRole.Administrator });
 
             _mockStorage.Setup(s => s.ListFilesAsync(It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<FileNode>());
 
             // Act
-            await _engine.SyncAsync(localPath, "", UserRole.Administrator, new Progress<SyncProgress>(), null, CancellationToken.None);
+            await _engine.SyncAsync(localPath, "", ConflictPolicy.NewerWins, new Progress<SyncProgress>(), CancellationToken.None);
 
-            // Assert
-            _mockDb.Verify(d => d.DeleteSnapshot("test.txt"), Times.Once);
+            // Assert - stale snapshot entry should have been cleaned up
+            var records = await _metadataCache.GetAllRecordsAsync(localPath);
+            Assert.Empty(records);
         }
         finally
         {
@@ -144,3 +154,4 @@ public class SyncEngineTests
         }
     }
 }
+

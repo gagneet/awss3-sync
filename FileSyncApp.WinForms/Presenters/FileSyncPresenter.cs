@@ -1,6 +1,7 @@
 using FileSyncApp.Core.Interfaces;
 using FileSyncApp.Core.Models;
 using FileSyncApp.WinForms.Forms;
+using System.IO;
 using System.Windows.Forms;
 
 namespace FileSyncApp.WinForms.Presenters;
@@ -27,6 +28,7 @@ public class FileSyncPresenter
         _view.SyncRequested += OnSyncRequested;
         _view.CancelRequested += (s, e) => _cts?.Cancel();
         _view.RefreshRequested += (s, e) => RefreshRemote();
+        _syncEngine.ConflictsDetected += OnConflictsDetected;
     }
 
     private async void OnSyncRequested(object? sender, EventArgs e)
@@ -50,11 +52,13 @@ public class FileSyncPresenter
         {
             var progress = new Progress<SyncProgress>(p =>
             {
-                _view.StatusMessage = p.Status;
-                _view.ProgressValue = (int)p.PercentComplete;
+                _view.StatusMessage = $"[{p.Phase}] {p.CurrentFile}";
+                _view.ProgressValue = p.TotalOperations > 0
+                    ? p.CompletedOperations * 100 / p.TotalOperations
+                    : 0;
             });
 
-            await _syncEngine.SyncAsync(localPath, "", user.Role, progress, ResolveConflictAsync, _cts.Token);
+            await _syncEngine.SyncAsync(localPath, "", ConflictPolicy.PromptUser, progress, _cts.Token);
             _view.StatusMessage = "Sync completed successfully";
         }
         catch (OperationCanceledException)
@@ -72,23 +76,42 @@ public class FileSyncPresenter
         }
     }
 
-    private Task<SyncActionType> ResolveConflictAsync(SyncActionRequest req)
+    private void OnConflictsDetected(object? sender, ConflictEventArgs e)
     {
-        SyncActionType result = SyncActionType.Skip;
+        if (_view is not Form form) return;
 
-        if (_view is Form form)
+        foreach (var conflict in e.Conflicts)
         {
-            form.Invoke(new Action(() =>
+            var local = new FileNode(
+                Path.GetFileName(conflict.LocalPath),
+                conflict.LocalPath,
+                isDirectory: false,
+                conflict.LocalSize,
+                conflict.LocalModified);
+            var remote = new FileNode(
+                Path.GetFileName(conflict.RemotePath),
+                conflict.RemotePath,
+                isDirectory: false,
+                conflict.RemoteSize,
+                conflict.RemoteModified);
+
+            form.Invoke(() =>
             {
-                using var conflictDialog = new ConflictForm(req.Path, req.Local!, req.Remote!);
-                if (conflictDialog.ShowDialog() == DialogResult.OK)
+                using var dlg = new ConflictForm(conflict.LocalPath, local, remote);
+                if (dlg.ShowDialog() == DialogResult.OK)
                 {
-                    result = conflictDialog.SelectedAction;
+                    conflict.Resolution = dlg.SelectedAction switch
+                    {
+                        SyncActionType.Upload   => ConflictResolution.KeepLocal,
+                        SyncActionType.Download => ConflictResolution.KeepRemote,
+                        SyncActionType.KeepBoth => ConflictResolution.KeepBoth,
+                        _                       => ConflictResolution.Skip
+                    };
                 }
-            }));
+            });
         }
 
-        return Task.FromResult(result);
+        e.Handled = true;
     }
 
     private async void RefreshRemote()

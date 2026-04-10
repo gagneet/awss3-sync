@@ -126,51 +126,65 @@ public class S3FileStorageService : IFileStorageService, IDisposable
 
                 var response = await client.ListObjectsV2Async(request, linkedCts.Token);
 
-                // Add directories (common prefixes)
-                foreach (var commonPrefix in response.CommonPrefixes)
+                // Add directories (common prefixes) - null check required as AWS SDK can return null
+                var commonPrefixes = response.CommonPrefixes;
+                if (commonPrefixes != null)
                 {
-                    if (string.IsNullOrEmpty(commonPrefix)) continue;
-                    
-                    var dirName = commonPrefix.TrimEnd('/');
-                    if (dirName.Contains('/'))
-                        dirName = dirName.Substring(dirName.LastIndexOf('/') + 1);
-
-                    var node = new FileNode(
-                        dirName,
-                        commonPrefix,
-                        true,
-                        0,
-                        DateTime.MinValue,
-                        new List<UserRole> { UserRole.Administrator, UserRole.Executive, UserRole.User });
-                    
-                    files.Add(node);
-                }
-
-                // Add files
-                foreach (var obj in response.S3Objects)
-                {
-                    // Skip the prefix itself if it appears as an object
-                    if (obj.Key == prefix || obj.Key.EndsWith("/")) continue;
-
-                    var fileName = Path.GetFileName(obj.Key);
-                    if (string.IsNullOrEmpty(fileName)) continue;
-
-                    // For performance, don't fetch metadata for each file during listing
-                    // Just use default access roles
-                    var accessRoles = new List<UserRole> { UserRole.Administrator, UserRole.Executive, UserRole.User };
-
-                    var node = new FileNode(
-                        fileName,
-                        obj.Key,
-                        false,
-                        obj.Size ?? 0,
-                        obj.LastModified ?? DateTime.MinValue,
-                        accessRoles);
-
-                    if (CanUserAccessFile(userRole, node))
+                    foreach (var commonPrefix in commonPrefixes)
                     {
+                        if (string.IsNullOrEmpty(commonPrefix)) continue;
+                        
+                        var dirName = commonPrefix.TrimEnd('/');
+                        if (dirName.Contains('/'))
+                            dirName = dirName.Substring(dirName.LastIndexOf('/') + 1);
+
+                        var node = new FileNode(
+                            dirName,
+                            commonPrefix,
+                            true,
+                            0,
+                            DateTime.MinValue,
+                            new List<UserRole> { UserRole.Administrator, UserRole.Executive, UserRole.User });
+                        
                         files.Add(node);
                     }
+                }
+
+                // Add files - null check required as AWS SDK can return null for empty buckets
+                var s3Objects = response.S3Objects;
+                if (s3Objects != null)
+                {
+                    foreach (var obj in s3Objects)
+                    {
+                        if (obj == null) continue;
+                        
+                        // Skip the prefix itself if it appears as an object
+                        if (obj.Key == prefix || obj.Key.EndsWith("/")) continue;
+
+                        var fileName = Path.GetFileName(obj.Key);
+                        if (string.IsNullOrEmpty(fileName)) continue;
+
+                        // For performance, don't fetch metadata for each file during listing
+                        // Just use default access roles
+                        var accessRoles = new List<UserRole> { UserRole.Administrator, UserRole.Executive, UserRole.User };
+
+                        var node = new FileNode(
+                            fileName,
+                            obj.Key,
+                            false,
+                            obj.Size ?? 0,
+                            obj.LastModified ?? DateTime.MinValue,
+                            accessRoles);
+
+                        if (CanUserAccessFile(userRole, node))
+                        {
+                            files.Add(node);
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogDebug("S3Objects collection was null for prefix '{Prefix}'", prefix);
                 }
 
                 continuationToken = response.NextContinuationToken;
@@ -277,6 +291,53 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         if (userRole == UserRole.User)
             return node.AccessRoles.Contains(UserRole.User);
         return false;
+    }
+
+    public async Task DownloadAsZipAsync(IEnumerable<string> s3Keys, string zipFilePath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var client = GetClient();
+        var config = _configService.GetConfiguration();
+        var zipService = new S3ZipService(client, config.AWS.BucketName);
+        using var fileStream = System.IO.File.Create(zipFilePath);
+        await zipService.CreateZipFromS3Async(s3Keys, fileStream);
+        progress?.Report(100.0);
+    }
+
+    public async Task DownloadFolderAsync(string s3Prefix, string localBasePath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var user = _authService.GetCurrentUser();
+        var files = await ListFilesAsync(user?.Role ?? UserRole.User, s3Prefix, cancellationToken);
+        var total = files.Count;
+        var completed = 0;
+
+        foreach (var file in files)
+        {
+            var relative = file.Path.StartsWith(s3Prefix) ? file.Path[s3Prefix.Length..].TrimStart('/') : file.Path;
+            var localPath = System.IO.Path.Combine(localBasePath, relative.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(localPath)!);
+            await DownloadFileAsync(file.Path, localPath, null, cancellationToken);
+            completed++;
+            progress?.Report(total > 0 ? (double)completed / total * 100 : 0);
+        }
+    }
+
+    public async Task DeleteFilesAsync(IEnumerable<string> s3Keys, CancellationToken cancellationToken = default)
+    {
+        foreach (var key in s3Keys)
+            await DeleteFileAsync(key, cancellationToken);
+    }
+
+    public Task<string?> GetPresignedUrlAsync(string s3Key, TimeSpan expiry, CancellationToken cancellationToken = default)
+    {
+        var client = GetClient();
+        var config = _configService.GetConfiguration();
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = config.AWS.BucketName,
+            Key = s3Key,
+            Expires = DateTime.UtcNow.Add(expiry)
+        };
+        return Task.FromResult<string?>(client.GetPreSignedURL(request));
     }
 
     public void Dispose()
