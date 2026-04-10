@@ -1,110 +1,100 @@
-# Build script for Strata S3 Manager
-# Run this script to build the application
+# Build script for AWS S3 File Sync
+# Usage:
+#   .\build.ps1                          # Self-contained single-file release (default)
+#   .\build.ps1 -Configuration Debug     # Debug build
+#   .\build.ps1 -Version 1.2.3           # Set version
+#   .\build.ps1 -Runtime win-arm64       # Arm64 target
+#   .\build.ps1 -NoSingleFile            # Framework-dependent (requires .NET 8 on target)
 
 param(
     [string]$Configuration = "Release",
-    [string]$OutputPath = ".\publish",
-    [switch]$SelfContained = $false,
-    [switch]$SingleFile = $false
+    [string]$OutputPath    = ".\publish",
+    [string]$Runtime       = "win-x64",
+    [string]$Version       = "1.0.0",
+    [switch]$NoSingleFile,
+    [switch]$SkipTests
 )
 
-Write-Host "Building Strata S3 Manager..." -ForegroundColor Green
-Write-Host "Configuration: $Configuration" -ForegroundColor Yellow
+$ErrorActionPreference = "Stop"
+$Project = "FileSyncApp.WinForms\FileSyncApp.WinForms.csproj"
 
-# Clean previous builds
+Write-Host "=== AWS S3 File Sync - Build Script ===" -ForegroundColor Cyan
+Write-Host "Configuration : $Configuration"  -ForegroundColor Yellow
+Write-Host "Runtime       : $Runtime"        -ForegroundColor Yellow
+Write-Host "Version       : $Version"        -ForegroundColor Yellow
+Write-Host "Single-file   : $(-not $NoSingleFile)" -ForegroundColor Yellow
+Write-Host ""
+
+# Clean output
 if (Test-Path $OutputPath) {
-    Write-Host "Cleaning previous build..." -ForegroundColor Yellow
+    Write-Host "Cleaning previous output..." -ForegroundColor Yellow
     Remove-Item -Path $OutputPath -Recurse -Force
 }
 
-# Restore NuGet packages
-Write-Host "Restoring NuGet packages..." -ForegroundColor Yellow
+# Restore
+Write-Host "Restoring packages..." -ForegroundColor Yellow
 dotnet restore
+if ($LASTEXITCODE -ne 0) { Write-Host "Restore failed." -ForegroundColor Red; exit 1 }
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Failed to restore packages!" -ForegroundColor Red
-    exit 1
+# Test (unless skipped)
+if (-not $SkipTests) {
+    Write-Host "Running tests..." -ForegroundColor Yellow
+    dotnet test --no-restore -c $Configuration --logger "console;verbosity=minimal"
+    if ($LASTEXITCODE -ne 0) { Write-Host "Tests failed." -ForegroundColor Red; exit 1 }
 }
 
-# Build the project
-Write-Host "Building project..." -ForegroundColor Yellow
-dotnet build -c $Configuration
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Build failed!" -ForegroundColor Red
-    exit 1
-}
-
-# Publish the application
+# Publish
 Write-Host "Publishing application..." -ForegroundColor Yellow
 
 $publishArgs = @(
-    "publish",
+    "publish", $Project,
     "-c", $Configuration,
+    "-r", $Runtime,
+    "--self-contained", "true",
     "-o", $OutputPath,
-    "--no-build"
+    "-p:Version=$Version",
+    "-p:AssemblyVersion=$Version.0",
+    "-p:FileVersion=$Version.0",
+    "-p:PublishReadyToRun=true",
+    "-p:IncludeNativeLibrariesForSelfExtract=true"
 )
 
-if ($SelfContained) {
-    $publishArgs += "--self-contained"
-    $publishArgs += "-r"
-    $publishArgs += "win-x64"
-}
-
-if ($SingleFile) {
+if (-not $NoSingleFile) {
     $publishArgs += "-p:PublishSingleFile=true"
-    $publishArgs += "-p:IncludeNativeLibrariesForSelfExtract=true"
 }
 
 dotnet @publishArgs
+if ($LASTEXITCODE -ne 0) { Write-Host "Publish failed." -ForegroundColor Red; exit 1 }
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Publish failed!" -ForegroundColor Red
-    exit 1
+# Ensure appsettings template is present for first-time users
+$templateSrc  = "FileSyncApp.WinForms\appsettings.template.json"
+$templateDest = Join-Path $OutputPath "appsettings.template.json"
+$configDest   = Join-Path $OutputPath "appsettings.json"
+
+if (Test-Path $templateSrc) {
+    Copy-Item $templateSrc $templateDest -Force
 }
 
-# Copy configuration file
-Write-Host "Copying configuration files..." -ForegroundColor Yellow
-Copy-Item -Path "appsettings.json" -Destination $OutputPath -Force
-
-# Create sample configuration if it doesn't exist
-$configPath = Join-Path $OutputPath "appsettings.json"
-if (-not (Test-Path $configPath)) {
-    Write-Host "Creating sample configuration..." -ForegroundColor Yellow
-    @"
-{
-  "AWS": {
-    "AccessKey": "YOUR_AWS_ACCESS_KEY",
-    "SecretKey": "YOUR_AWS_SECRET_KEY",
-    "Region": "ap-southeast-2",
-    "BucketName": "your-strata-bucket"
-  },
-  "Cognito": {
-    "UserPoolId": "YOUR_USER_POOL_ID",
-    "ClientId": "YOUR_CLIENT_ID",
-    "ClientSecret": "",
-    "Region": "ap-southeast-2",
-    "IdentityPoolId": "YOUR_IDENTITY_POOL_ID",
-    "EnableOfflineMode": false,
-    "OfflineCacheDurationDays": 7
-  },
-  "Performance": {
-    "MaxConcurrentUploads": 5,
-    "MaxConcurrentDownloads": 5,
-    "ChunkSizeBytes": 5242880,
-    "EnableMetadataCache": true,
-    "MetadataCacheDurationMinutes": 5,
-    "EnableDeltaSync": true,
-    "SyncBatchSize": 100
-  }
-}
-"@ | Out-File -FilePath $configPath -Encoding UTF8
+# If no appsettings.json exists in output, create one from the template
+if (-not (Test-Path $configDest)) {
+    if (Test-Path $templateSrc) {
+        Copy-Item $templateSrc $configDest -Force
+        Write-Host "Created default appsettings.json - update with your AWS credentials." -ForegroundColor Cyan
+    }
 }
 
-Write-Host "Build completed successfully!" -ForegroundColor Green
-Write-Host "Output location: $OutputPath" -ForegroundColor Cyan
+# Zip the output for easy distribution
+$zipName = "FileSyncApp-$Version-$Runtime.zip"
+$zipPath = Join-Path (Split-Path $OutputPath -Parent) $zipName
+if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+Compress-Archive -Path "$OutputPath\*" -DestinationPath $zipPath
+Write-Host "Distribution zip: $zipPath" -ForegroundColor Green
+
 Write-Host ""
-Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "1. Update appsettings.json with your AWS configuration"
-Write-Host "2. Follow AWS_IAM_SETUP_GUIDE.md to configure Cognito"
-Write-Host "3. Run AWSS3Sync.exe to start the application"
+Write-Host "=== Build complete ===" -ForegroundColor Green
+Write-Host "Executable  : $OutputPath\FileSyncApp.exe" -ForegroundColor Cyan
+Write-Host "Distribution: $zipPath"                    -ForegroundColor Cyan
+Write-Host ""
+Write-Host "First-time setup:" -ForegroundColor Yellow
+Write-Host "  1. Edit appsettings.json with your AWS credentials"
+Write-Host "  2. Run FileSyncApp.exe"
