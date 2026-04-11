@@ -133,6 +133,35 @@ The workflow builds a self-contained single-file `.exe`, zips it, and creates a 
 
 ---
 
+## Publishing a release as a standalone executable
+
+● Use the repo’s built-in publish script:
+
+.\build.ps1
+
+That creates a self-contained single-file Windows build. The target laptop does not need Visual Studio, the source code, or the project DLLs.
+
+1. From the repo root, run: .\build.ps1 -Version 1.0.0
+2. Take the generated output:
+ - publish\FileSyncApp.exe
+ - the packaged zip FileSyncApp-1.0.0-win-x64.zip
+3. Copy the zip to the laptop, extract it, edit appsettings.json, then run FileSyncApp.exe.
+
+Important: if you want no DLLs, do not use -NoSingleFile.
+The app itself is a single .exe, but you should still keep appsettings.json beside it for configuration.
+
+Useful variants:
+
+.\build.ps1 -Runtime win-x64      # normal Intel/AMD laptop
+.\build.ps1 -Runtime win-arm64    # ARM Windows laptop
+.\build.ps1 -SkipTests            # faster packaging
+
+If you want, the equivalent raw .NET command is:
+
+dotnet publish FileSyncApp.WinForms\FileSyncApp.WinForms.csproj -c Release -r win-x64 --self-contained true -o publish -p:PublishSingleFile=true
+
+---
+
 ## 🧪 Running Tests
 
 ```powershell
