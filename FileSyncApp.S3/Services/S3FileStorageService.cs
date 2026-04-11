@@ -40,6 +40,22 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         _maxBytesPerSecond = config.Performance.MaxBytesPerSecond;
     }
 
+    /// <summary>
+    /// Invalidate the cached S3 client so the next call to GetClient() re-initialises
+    /// using the currently active profile. Call this after switching profiles.
+    /// </summary>
+    public void InvalidateClient()
+    {
+        _s3Client?.Dispose();
+        _transferUtility?.Dispose();
+        _s3Client        = null;
+        _transferUtility = null;
+        _lastAccessKey   = string.Empty;
+        _isInitialized   = false;
+        _listingCache.Clear();
+        _logger.LogInformation("S3 client invalidated — will re-initialise on next request");
+    }
+
     private IAmazonS3 GetClient()
     {
         var user = _authService.GetCurrentUser();

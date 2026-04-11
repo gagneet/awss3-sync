@@ -594,8 +594,68 @@ public class SyncEngine : ISyncEngine
 
     private async Task ResolveConflictsAsync(SyncPlan plan, CancellationToken cancellationToken)
     {
-        // Conflicts should already have resolutions from UI or default policy
-        // This method can add additional logic if needed
+        if (!plan.HasConflicts) return;
+
+        // Raise event so the UI can show the conflict resolution dialog
+        var args = new ConflictEventArgs(plan.Conflicts);
+        ConflictsDetected?.Invoke(this, args);
+
+        // If the UI didn't handle it, apply the default policy
+        if (!args.Handled)
+            ApplyDefaultConflictPolicy(plan.Conflicts, _defaultPolicy);
+
+        // Move resolved conflicts into the appropriate upload/download lists
+        foreach (var conflict in plan.Conflicts.Where(c => c.Resolution.HasValue))
+        {
+            switch (conflict.Resolution!.Value)
+            {
+                case ConflictResolution.KeepLocal:
+                    plan.Uploads.Add(new SyncOperation
+                    {
+                        Type = SyncOperationType.Upload,
+                        LocalPath = conflict.LocalPath,
+                        RemotePath = conflict.RemotePath,
+                        Size = conflict.LocalSize,
+                        Direction = SyncDirection.LocalToRemote
+                    });
+                    break;
+
+                case ConflictResolution.KeepRemote:
+                    plan.Downloads.Add(new SyncOperation
+                    {
+                        Type = SyncOperationType.Download,
+                        LocalPath = conflict.LocalPath,
+                        RemotePath = conflict.RemotePath,
+                        Size = conflict.RemoteSize,
+                        Direction = SyncDirection.RemoteToLocal
+                    });
+                    break;
+
+                case ConflictResolution.KeepBoth:
+                    var newLocalPath = GetConflictRenamedPath(conflict.LocalPath);
+                    if (File.Exists(conflict.LocalPath))
+                        File.Move(conflict.LocalPath, newLocalPath, overwrite: false);
+                    plan.Downloads.Add(new SyncOperation
+                    {
+                        Type = SyncOperationType.Download,
+                        LocalPath = conflict.LocalPath,
+                        RemotePath = conflict.RemotePath,
+                        Size = conflict.RemoteSize,
+                        Direction = SyncDirection.RemoteToLocal
+                    });
+                    plan.Uploads.Add(new SyncOperation
+                    {
+                        Type = SyncOperationType.Upload,
+                        LocalPath = newLocalPath,
+                        RemotePath = GetConflictRenamedPath(conflict.RemotePath),
+                        Size = conflict.LocalSize,
+                        Direction = SyncDirection.LocalToRemote
+                    });
+                    break;
+                // Skip → do nothing
+            }
+        }
+
         await Task.CompletedTask;
     }
 

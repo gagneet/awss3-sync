@@ -47,10 +47,12 @@ static class Program
                 services.AddSingleton<MetadataCache>(sp =>
                     new MetadataCache("sync_metadata.db", sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<MetadataCache>>()));
                 services.AddSingleton<ISyncEngine, SyncEngine>();
+                services.AddSingleton<ISyncSchedulerService, SyncSchedulerService>();
 
                 services.AddTransient<MainForm>();
                 services.AddTransient<LoginForm>();
                 services.AddTransient<SettingsForm>();
+                services.AddTransient<ScheduleForm>();
                 services.AddTransient<FileSyncPresenter>();
             })
             .Build();

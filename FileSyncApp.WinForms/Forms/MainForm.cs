@@ -25,7 +25,11 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private KryptonButton _btnNewFolder = null!;
     private KryptonButton _btnRefresh   = null!;
     private KryptonButton _btnSettings  = null!;
+    private KryptonButton _btnSchedules = null!;
     private Button        _btnCancel    = null!;
+
+    // ── Profile selector ─────────────────────────────────────────────────
+    private ComboBox _cmbProfile = null!;
 
     // ── Local pane ────────────────────────────────────────────────────────
     private KryptonTextBox _txtLocalPath      = null!;
@@ -71,16 +75,20 @@ public partial class MainForm : KryptonForm, IFileSyncView
     public bool   ProgressVisible { set => SafeSetProgressVisible(value); }
 
     // ─────────────────────────────────────────────────────────────────────
+    private readonly ISyncSchedulerService? _schedulerService;
+
     public MainForm(
         IAuthService authService,
         IFileStorageService s3Service,
         IConfigurationService configService,
-        ISyncEngine syncEngine)
+        ISyncEngine syncEngine,
+        ISyncSchedulerService? schedulerService = null)
     {
-        _authService   = authService;
-        _s3Service     = s3Service;
-        _configService = configService;
-        _syncEngine    = syncEngine;
+        _authService       = authService;
+        _s3Service         = s3Service;
+        _configService     = configService;
+        _syncEngine        = syncEngine;
+        _schedulerService  = schedulerService;
 
         BuildUI();
         BuildContextMenus();
@@ -111,6 +119,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _btnNewFolder = ToolBtn("📁  New Folder",    Color.FromArgb(60, 60, 90));
         _btnRefresh   = ToolBtn("↺  Refresh",       Color.FromArgb(70, 70, 80));
         _btnSettings  = ToolBtn("⚙  Settings",      Color.FromArgb(70, 70, 80));
+        _btnSchedules = ToolBtn("⏱  Schedules",     Color.FromArgb(90, 60, 110));
 
         _btnCancel = new Button
         {
@@ -128,13 +137,27 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _btnDownload.Enabled = false;
 
         int bx = 10;
-        foreach (Control btn in new Control[] { _btnSync, _btnUpload, _btnDownload, _btnNewFolder, _btnRefresh, _btnSettings, _btnCancel })
+        foreach (Control btn in new Control[] { _btnSync, _btnUpload, _btnDownload, _btnNewFolder, _btnRefresh, _btnSettings, _btnSchedules, _btnCancel })
         {
             btn.Location = new Point(bx, 9);
             btn.Size     = new Size(110, 38);
             bx += 116;
         }
-        toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnNewFolder, _btnRefresh, _btnSettings, _btnCancel });
+
+        // ── Profile selector (right side of toolbar) ─────────────────────
+        _cmbProfile = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Font          = new Font("Segoe UI", 8.5f),
+            BackColor     = Color.FromArgb(60, 60, 65),
+            ForeColor     = Color.White,
+            Width         = 160,
+            Height        = 28,
+        };
+        _cmbProfile.Location = new Point(Width - 200, 13);
+        _cmbProfile.SelectedIndexChanged += OnProfileChanged;
+
+        toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnNewFolder, _btnRefresh, _btnSettings, _btnSchedules, _btnCancel, _cmbProfile });
 
         // ── Split container ─────────────────────────────────────────────
         // Keep min sizes small so the [Panel1MinSize, Width-Panel2MinSize]
@@ -415,12 +438,13 @@ public partial class MainForm : KryptonForm, IFileSyncView
 
     private void WireEvents()
     {
-        _btnSync.Click     += async (s, e) => await PerformSyncAsync();
-        _btnUpload.Click   += OnUploadSelected;
-        _btnDownload.Click += OnDownloadSelected;
-        _btnRefresh.Click  += async (s, e) => { LoadLocalFolder(_localCurrentPath); await LoadS3ListAsync(_s3CurrentPrefix); };
-        _btnSettings.Click += (s, e) => ShowSettingsDialog();
-        _btnCancel.Click   += (s, e) => CancelCurrentOperation();
+        _btnSync.Click      += async (s, e) => await PerformSyncAsync();
+        _btnUpload.Click    += OnUploadSelected;
+        _btnDownload.Click  += OnDownloadSelected;
+        _btnRefresh.Click   += async (s, e) => { LoadLocalFolder(_localCurrentPath); await LoadS3ListAsync(_s3CurrentPrefix); };
+        _btnSettings.Click  += (s, e) => ShowSettingsDialog();
+        _btnSchedules.Click += (s, e) => ShowSchedulesDialog();
+        _btnCancel.Click    += (s, e) => CancelCurrentOperation();
 
         _btnBrowseLocal.Click    += (s, e) => BrowseForLocalFolder();
         _btnLocalUp.Click        += (s, e) => NavigateLocalUp();
@@ -576,25 +600,72 @@ public partial class MainForm : KryptonForm, IFileSyncView
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        // BeginInvoke posts to the message queue and runs after all pending
-        // WM_SIZE / layout messages, so _split.Width is guaranteed non-zero.
         BeginInvoke(() =>
         {
             if (_split.Width > 0)
                 _split.SplitterDistance = _split.Width / 2;
         });
+
+        // Populate profile selector
+        PopulateProfileCombo();
     }
 
     protected override async void OnShown(EventArgs e)
     {
         base.OnShown(e);
         await LoadS3ListAsync("");
+
+        // Start background scheduler (fire-and-forget; non-fatal if it fails)
+        if (_schedulerService is not null)
+        {
+            try { await _schedulerService.StartAsync(); }
+            catch (Exception ex) { SafeSetStatus($"Scheduler init warning: {ex.Message}"); }
+        }
     }
 
     private void UpdateToolbarButtons()
     {
         _btnUpload.Enabled   = _localListView.CheckedItems.Cast<ListViewItem>().Any(i => i.Tag != null);
         _btnDownload.Enabled = _s3ListView.CheckedItems.Cast<ListViewItem>().Any(i => i.Tag != null);
+    }
+
+    private void PopulateProfileCombo()
+    {
+        _cmbProfile.SelectedIndexChanged -= OnProfileChanged;
+        _cmbProfile.Items.Clear();
+        foreach (var p in _configService.GetProfiles())
+            _cmbProfile.Items.Add(p.Name);
+
+        var active = _configService.GetActiveProfile();
+        if (active != null && _cmbProfile.Items.Contains(active.Name))
+            _cmbProfile.SelectedItem = active.Name;
+        else if (_cmbProfile.Items.Count > 0)
+            _cmbProfile.SelectedIndex = 0;
+
+        _cmbProfile.SelectedIndexChanged += OnProfileChanged;
+    }
+
+    private async void OnProfileChanged(object? sender, EventArgs e)
+    {
+        if (_cmbProfile.SelectedItem is not string name) return;
+        _configService.SetActiveProfile(name);
+
+        // Invalidate S3 client so it re-connects with new credentials
+        if (_s3Service is FileSyncApp.S3.Services.S3FileStorageService svc)
+            svc.InvalidateClient();
+
+        var profile = _configService.GetActiveProfile();
+        if (profile != null)
+            Text = $"FileSyncApp – {profile.BucketName}";
+
+        SafeSetStatus($"Switched to profile: {name}");
+        await LoadS3ListAsync("");
+    }
+
+    private void ShowSchedulesDialog()
+    {
+        using var dlg = new ScheduleForm(_configService, _schedulerService);
+        dlg.ShowDialog(this);
     }
 
     #endregion
@@ -898,7 +969,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private void OnConflictsDetected(object? sender, ConflictEventArgs e)
     {
         if (InvokeRequired) { Invoke(() => OnConflictsDetected(sender, e)); return; }
-        using var dlg = new ConflictResolutionDialog(e.Conflicts);
+        using var dlg = new ConflictResolutionForm(e.Conflicts);
         if (dlg.ShowDialog(this) == DialogResult.OK) e.Handled = true;
     }
 
@@ -1601,96 +1672,6 @@ public partial class MainForm : KryptonForm, IFileSyncView
     }
 
     #endregion
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-/// <summary>Dialog for resolving file conflicts</summary>
-public class ConflictResolutionDialog : Form
-{
-    private readonly List<ConflictInfo> _conflicts;
-    private DataGridView _grid = null!;
-
-    public ConflictResolutionDialog(List<ConflictInfo> conflicts)
-    {
-        _conflicts = conflicts;
-        InitializeComponent();
-        LoadConflicts();
-    }
-
-    private void InitializeComponent()
-    {
-        Text = "Resolve Conflicts";
-        Width = 820; Height = 520;
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-
-        var label = new Label
-        {
-            Text = $"{_conflicts.Count} file(s) modified on both sides. Choose a resolution for each:",
-            Location = new Point(10, 10), Size = new Size(780, 40)
-        };
-
-        _grid = new DataGridView
-        {
-            Location = new Point(10, 55), Size = new Size(780, 360),
-            AutoGenerateColumns = false, AllowUserToAddRows = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect
-        };
-        _grid.Columns.AddRange(new DataGridViewColumn[]
-        {
-            new DataGridViewTextBoxColumn { HeaderText = "File",            Width = 240, DataPropertyName = "FileName" },
-            new DataGridViewTextBoxColumn { HeaderText = "Local Modified",  Width = 130, DataPropertyName = "LocalModified" },
-            new DataGridViewTextBoxColumn { HeaderText = "Remote Modified", Width = 130, DataPropertyName = "RemoteModified" },
-            new DataGridViewComboBoxColumn
-            {
-                HeaderText = "Resolution", Width = 160, DataPropertyName = "Resolution",
-                Items = { "Keep Local", "Keep Remote", "Keep Both", "Skip" }
-            }
-        });
-
-        var btnApply  = new Button { Text = "Apply",  Location = new Point(625, 430), Size = new Size(80, 30), DialogResult = DialogResult.OK };
-        var btnCancel = new Button { Text = "Cancel", Location = new Point(715, 430), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
-        Controls.AddRange(new Control[] { label, _grid, btnApply, btnCancel });
-        AcceptButton = btnApply; CancelButton = btnCancel;
-    }
-
-    private void LoadConflicts()
-    {
-        _grid.DataSource = _conflicts.Select(c => new ConflictViewModel
-        {
-            FileName       = Path.GetFileName(c.LocalPath),
-            LocalModified  = c.LocalModified.ToString("g"),
-            RemoteModified = c.RemoteModified.ToString("g"),
-            Resolution     = "Keep Local",
-            Conflict       = c
-        }).ToList();
-    }
-
-    protected override void OnFormClosing(FormClosingEventArgs e)
-    {
-        if (DialogResult == DialogResult.OK && _grid.DataSource is List<ConflictViewModel> list)
-        {
-            foreach (var row in list)
-                row.Conflict.Resolution = row.Resolution switch
-                {
-                    "Keep Local"   => ConflictResolution.KeepLocal,
-                    "Keep Remote"  => ConflictResolution.KeepRemote,
-                    "Keep Both"    => ConflictResolution.KeepBoth,
-                    _              => ConflictResolution.Skip
-                };
-        }
-        base.OnFormClosing(e);
-    }
-
-    private class ConflictViewModel
-    {
-        public string       FileName       { get; set; } = "";
-        public string       LocalModified  { get; set; } = "";
-        public string       RemoteModified { get; set; } = "";
-        public string       Resolution     { get; set; } = "";
-        public ConflictInfo Conflict       { get; set; } = null!;
-    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
