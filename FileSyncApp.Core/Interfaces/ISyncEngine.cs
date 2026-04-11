@@ -41,6 +41,9 @@ public interface ISyncEngine
 /// </summary>
 public class SyncPlan
 {
+    /// <summary>The local root directory used when this plan was calculated.</summary>
+    public string LocalRootPath { get; set; } = string.Empty;
+
     public List<SyncOperation> Uploads { get; set; } = new();
     public List<SyncOperation> Downloads { get; set; } = new();
     public List<SyncOperation> LocalDeletes { get; set; } = new();

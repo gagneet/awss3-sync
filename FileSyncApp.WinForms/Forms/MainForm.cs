@@ -815,6 +815,23 @@ public partial class MainForm : KryptonForm, IFileSyncView
             return;
         }
 
+        // Smart direction: if only one side has checked items, route to upload/download
+        bool hasLocalChecked = _localListView.CheckedItems.Cast<ListViewItem>().Any(i => i.Tag != null);
+        bool hasS3Checked    = _s3ListView.CheckedItems.Cast<ListViewItem>().Any(i => i.Tag != null);
+
+        if (hasLocalChecked && !hasS3Checked)
+        {
+            // Local items selected → upload
+            OnUploadSelected(null, EventArgs.Empty);
+            return;
+        }
+        if (hasS3Checked && !hasLocalChecked)
+        {
+            // S3 items selected → download
+            OnDownloadSelected(null, EventArgs.Empty);
+            return;
+        }
+
         _currentOperationCts = new CancellationTokenSource();
         try
         {

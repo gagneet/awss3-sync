@@ -36,7 +36,7 @@ public class SyncEngine : ISyncEngine
     {
         _logger.LogInformation("Calculating sync changes for {LocalPath} <-> {RemotePrefix}", localPath, remotePrefix);
 
-        var plan = new SyncPlan();
+        var plan = new SyncPlan { LocalRootPath = localPath };
         var user = _authService.GetCurrentUser();
         if (user == null)
         {
@@ -52,8 +52,8 @@ public class SyncEngine : ISyncEngine
         var localFiles = await ScanLocalFilesAsync(localPath, cancellationToken);
         _logger.LogInformation("Found {Count} local files", localFiles.Count);
 
-        // List remote files
-        var remoteFiles = await _remoteStorage.ListFilesAsync(user.Role, remotePrefix, cancellationToken);
+        // List all remote files recursively so nested files are compared correctly
+        var remoteFiles = await _remoteStorage.ListAllFilesRecursiveAsync(user.Role, remotePrefix, cancellationToken);
         var remoteDict = remoteFiles.Where(f => !f.IsDirectory).ToDictionary(f => f.Path, f => f);
         _logger.LogInformation("Found {Count} remote files", remoteFiles.Count);
 
@@ -231,11 +231,14 @@ public class SyncEngine : ISyncEngine
                     result.FilesUploaded++;
                     bytesTransferred += op.Size;
 
-                    // Update snapshot
-                    await _metadataCache.UpdateRecordAsync(
-                        Path.GetDirectoryName(op.LocalPath)!,
-                        GetRelativePath(Path.GetDirectoryName(op.LocalPath)!, op.LocalPath),
-                        op.Size, File.GetLastWriteTimeUtc(op.LocalPath), string.Empty);
+                    // Update snapshot using the plan's local root so relative paths are correct
+                    if (!string.IsNullOrEmpty(plan.LocalRootPath) && File.Exists(op.LocalPath))
+                    {
+                        var relPath = GetRelativePath(plan.LocalRootPath, op.LocalPath);
+                        await _metadataCache.UpdateRecordAsync(
+                            plan.LocalRootPath, relPath,
+                            op.Size, File.GetLastWriteTimeUtc(op.LocalPath), string.Empty);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -288,11 +291,14 @@ public class SyncEngine : ISyncEngine
                     result.FilesDownloaded++;
                     bytesTransferred += op.Size;
 
-                    // Update snapshot
-                    await _metadataCache.UpdateRecordAsync(
-                        Path.GetDirectoryName(op.LocalPath)!,
-                        GetRelativePath(Path.GetDirectoryName(op.LocalPath)!, op.LocalPath),
-                        op.Size, File.GetLastWriteTimeUtc(op.LocalPath), string.Empty);
+                    // Update snapshot using the plan's local root
+                    if (!string.IsNullOrEmpty(plan.LocalRootPath) && File.Exists(op.LocalPath))
+                    {
+                        var relPath = GetRelativePath(plan.LocalRootPath, op.LocalPath);
+                        await _metadataCache.UpdateRecordAsync(
+                            plan.LocalRootPath, relPath,
+                            op.Size, File.GetLastWriteTimeUtc(op.LocalPath), string.Empty);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -508,7 +514,7 @@ public class SyncEngine : ISyncEngine
         var records = await _metadataCache.GetAllRecordsAsync(localPath);
         if (records.Count == 0) return;
 
-        var remoteFiles = await _remoteStorage.ListFilesAsync(user.Role, remotePrefix, cancellationToken);
+        var remoteFiles = await _remoteStorage.ListAllFilesRecursiveAsync(user.Role, remotePrefix, cancellationToken);
         var remoteRelPaths = new HashSet<string>(
             remoteFiles.Where(f => !f.IsDirectory)
                        .Select(f => GetRelativePathFromRemote(remotePrefix, f.Path)));

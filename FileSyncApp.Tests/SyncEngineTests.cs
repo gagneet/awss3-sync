@@ -141,6 +141,9 @@ public class SyncEngineTests : IDisposable
             _mockStorage.Setup(s => s.ListFilesAsync(It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<FileNode>());
 
+            _mockStorage.Setup(s => s.ListAllFilesRecursiveAsync(It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<FileNode>());
+
             // Act
             await _engine.SyncAsync(localPath, "", ConflictPolicy.NewerWins, new Progress<SyncProgress>(), CancellationToken.None);
 

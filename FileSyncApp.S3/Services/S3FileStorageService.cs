@@ -295,6 +295,8 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         try
         {
             var client = GetClient();
+            // Guard against edge-case races where _transferUtility could be null
+            _transferUtility ??= new TransferUtility(client);
             var config = _configService.GetConfiguration();
             var bucketName = config.AWS.BucketName;
             var metadataService = new S3MetadataService(client, bucketName, _metadataLogger);
@@ -311,12 +313,16 @@ public class S3FileStorageService : IFileStorageService, IDisposable
 
             if (progress != null)
             {
-                uploadRequest.UploadProgressEvent += (s, e) => progress.Report((double)e.TransferredBytes / e.TotalBytes * 100);
+                uploadRequest.UploadProgressEvent += (s, e) =>
+                {
+                    var total = e.TotalBytes;
+                    if (total > 0) progress.Report((double)e.TransferredBytes / total * 100);
+                };
             }
 
             try
             {
-                await _transferUtility!.UploadAsync(uploadRequest, cancellationToken);
+                await _transferUtility.UploadAsync(uploadRequest, cancellationToken);
                 await metadataService.SetFileAccessRolesAsync(key, accessRoles);
                 _listingCache.Clear();
                 return true;
@@ -333,7 +339,7 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         }
     }
 
-    public async Task DownloadFileAsync(string s3Key, string localRootPath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    public async Task DownloadFileAsync(string s3Key, string localFilePath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         await _transferSemaphore.WaitAsync(cancellationToken);
         try
@@ -342,9 +348,10 @@ public class S3FileStorageService : IFileStorageService, IDisposable
             var config = _configService.GetConfiguration();
             var bucketName = config.AWS.BucketName;
 
-            var fullPath = Path.Combine(localRootPath, s3Key.Replace("/", "\\"));
+            // localFilePath is already the full destination path — do not re-combine with s3Key
+            var fullPath = localFilePath;
             var directory = Path.GetDirectoryName(fullPath);
-            if (directory != null) Directory.CreateDirectory(directory);
+            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
             var getRequest = new GetObjectRequest
             {
