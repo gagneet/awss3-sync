@@ -154,7 +154,9 @@ public partial class MainForm : KryptonForm, IFileSyncView
             Width         = 160,
             Height        = 28,
         };
-        _cmbProfile.Location = new Point(Width - 200, 13);
+        // Position right-aligned; maintain position on resize
+        _cmbProfile.Location = new Point(Math.Max(900, Width) - 172, 13);
+        toolbar.Resize += (_, _) => _cmbProfile.Location = new Point(toolbar.Width - 172, 13);
         _cmbProfile.SelectedIndexChanged += OnProfileChanged;
 
         toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnNewFolder, _btnRefresh, _btnSettings, _btnSchedules, _btnCancel, _cmbProfile });
