@@ -174,7 +174,10 @@ public sealed class ConflictResolutionForm : KryptonForm
     {
         if (_grid.DataSource is not List<ConflictRow> rows) return;
         foreach (var row in rows) row.Resolution = picker(row);
-        _grid.Refresh();
+        // Reset DataSource to force the grid to re-read all cell values
+        // (List<T> has no change notification, so Refresh() alone is insufficient)
+        _grid.DataSource = null;
+        _grid.DataSource = rows;
     }
 
     private void WriteResolutions()
