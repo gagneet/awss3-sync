@@ -464,6 +464,10 @@ public class SyncEngine : ISyncEngine
             }
         }
 
+        // Clear the conflicts list so ExecuteSyncAsync→ResolveConflictsAsync does not
+        // re-fire ConflictsDetected and duplicate the already-resolved operations.
+        plan.Conflicts.Clear();
+
         var result = await ExecuteSyncAsync(plan, progress, cancellationToken);
         await RemoveOrphanedSnapshotsAsync(localPath, remotePrefix, cancellationToken);
         return result;
