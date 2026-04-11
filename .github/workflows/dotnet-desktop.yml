@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: '**/*.trx'
@@ -109,7 +109,7 @@ jobs:
             -DestinationPath "FileSyncApp-${{ steps.version.outputs.VERSION }}-win-x64.zip"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: FileSyncApp-${{ steps.version.outputs.VERSION }}-win-x64
           path: FileSyncApp-${{ steps.version.outputs.VERSION }}-win-x64.zip
