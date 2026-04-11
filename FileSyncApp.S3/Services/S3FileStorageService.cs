@@ -21,6 +21,8 @@ public class S3FileStorageService : IFileStorageService, IDisposable
     private long _maxBytesPerSecond;
     private string _lastAccessKey = string.Empty;
     private bool _isInitialized = false;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (List<FileNode> Items, DateTime FetchedAt)> _listingCache = new();
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
 
     public S3FileStorageService(
         IAuthService authService,
@@ -111,6 +113,13 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
+        var cacheKey = $"{prefix}:{userRole}";
+        if (_listingCache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow - cached.FetchedAt < CacheTtl)
+        {
+            _logger.LogDebug("S3 listing cache hit for {Prefix}", prefix);
+            return cached.Items;
+        }
+
         try
         {
             do
@@ -198,12 +207,18 @@ public class S3FileStorageService : IFileStorageService, IDisposable
             } while (!string.IsNullOrEmpty(continuationToken) && !linkedCts.Token.IsCancellationRequested);
 
             _logger.LogInformation("Listed {Count} files from S3", files.Count);
+            _listingCache[cacheKey] = (files, DateTime.UtcNow);
             return files;
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
             _logger.LogWarning("S3 listing timed out after 60 seconds");
             throw new TimeoutException("S3 listing operation timed out. Please check your network connection.");
+        }
+        catch (AmazonS3Exception ex) when (!timeoutCts.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "S3 listing failed for prefix {Prefix}", prefix);
+            throw new InvalidOperationException(FriendlyS3Error(ex), ex);
         }
     }
 
@@ -267,6 +282,11 @@ public class S3FileStorageService : IFileStorageService, IDisposable
             _logger.LogWarning("Recursive S3 listing timed out");
             throw new TimeoutException("S3 recursive listing timed out. Please check your network connection.");
         }
+        catch (AmazonS3Exception ex) when (!timeoutCts.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "S3 recursive listing failed for prefix {Prefix}", prefix);
+            throw new InvalidOperationException(FriendlyS3Error(ex), ex);
+        }
     }
 
     public async Task<bool> UploadFileAsync(string filePath, string key, List<UserRole> accessRoles, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
@@ -294,9 +314,18 @@ public class S3FileStorageService : IFileStorageService, IDisposable
                 uploadRequest.UploadProgressEvent += (s, e) => progress.Report((double)e.TransferredBytes / e.TotalBytes * 100);
             }
 
-            await _transferUtility!.UploadAsync(uploadRequest, cancellationToken);
-            await metadataService.SetFileAccessRolesAsync(key, accessRoles);
-            return true;
+            try
+            {
+                await _transferUtility!.UploadAsync(uploadRequest, cancellationToken);
+                await metadataService.SetFileAccessRolesAsync(key, accessRoles);
+                _listingCache.Clear();
+                return true;
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Upload failed for {Key}", key);
+                throw new InvalidOperationException(FriendlyS3Error(ex), ex);
+            }
         }
         finally
         {
@@ -323,14 +352,23 @@ public class S3FileStorageService : IFileStorageService, IDisposable
                 Key = s3Key
             };
 
-            using var response = await client.GetObjectAsync(getRequest, cancellationToken);
-            using var responseStream = response.ResponseStream;
-            using var throttledStream = new FileSyncApp.Core.Services.ThrottledStream(responseStream, _maxBytesPerSecond);
+            try
+            {
+                using var response = await client.GetObjectAsync(getRequest, cancellationToken);
+                using var responseStream = response.ResponseStream;
+                using var throttledStream = new FileSyncApp.Core.Services.ThrottledStream(responseStream, _maxBytesPerSecond);
 
-            using var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await throttledStream.CopyToAsync(fileStream, 81920, cancellationToken);
+                using var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                await throttledStream.CopyToAsync(fileStream, 81920, cancellationToken);
 
-            File.SetLastWriteTimeUtc(fullPath, (response.LastModified ?? DateTime.UtcNow).ToUniversalTime());
+                File.SetLastWriteTimeUtc(fullPath, (response.LastModified ?? DateTime.UtcNow).ToUniversalTime());
+                _listingCache.Clear();
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Download failed for {Key}", s3Key);
+                throw new InvalidOperationException(FriendlyS3Error(ex), ex);
+            }
         }
         finally
         {
@@ -385,8 +423,35 @@ public class S3FileStorageService : IFileStorageService, IDisposable
 
     public async Task DeleteFilesAsync(IEnumerable<string> s3Keys, CancellationToken cancellationToken = default)
     {
-        foreach (var key in s3Keys)
-            await DeleteFileAsync(key, cancellationToken);
+        var client = GetClient();
+        var config = _configService.GetConfiguration();
+        var keyList = s3Keys.ToList();
+
+        // Process in batches of 1000 (S3 API limit)
+        for (int i = 0; i < keyList.Count; i += 1000)
+        {
+            var batch = keyList.Skip(i).Take(1000).ToList();
+            var request = new DeleteObjectsRequest
+            {
+                BucketName = config.AWS.BucketName,
+                Objects = batch.Select(k => new KeyVersion { Key = k }).ToList()
+            };
+            try
+            {
+                var response = await client.DeleteObjectsAsync(request, cancellationToken);
+                if (response.DeleteErrors?.Count > 0)
+                {
+                    var errors = string.Join(", ", response.DeleteErrors.Select(e => $"{e.Key}: {e.Message}"));
+                    _logger.LogWarning("Batch delete had {Count} error(s): {Errors}", response.DeleteErrors.Count, errors);
+                }
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Batch delete failed for {Count} keys", batch.Count);
+                throw new InvalidOperationException(FriendlyS3Error(ex), ex);
+            }
+        }
+        _listingCache.Clear();
     }
 
     public Task<string?> GetPresignedUrlAsync(string s3Key, TimeSpan expiry, CancellationToken cancellationToken = default)
@@ -401,6 +466,31 @@ public class S3FileStorageService : IFileStorageService, IDisposable
         };
         return Task.FromResult<string?>(client.GetPreSignedURL(request));
     }
+
+    public void InvalidateListingCache(string? prefix = null)
+    {
+        if (prefix == null)
+        {
+            _listingCache.Clear();
+        }
+        else
+        {
+            foreach (var key in _listingCache.Keys.Where(k => k.StartsWith(prefix)))
+                _listingCache.TryRemove(key, out _);
+        }
+    }
+
+    private static string FriendlyS3Error(AmazonS3Exception ex) => ex.ErrorCode switch
+    {
+        "AccessDenied"          => "Access denied. Check your AWS credentials and bucket permissions.",
+        "NoSuchBucket"          => "The S3 bucket does not exist. Verify BucketName in appsettings.json.",
+        "NoSuchKey"             => "The file no longer exists in S3.",
+        "InvalidAccessKeyId"    => "Invalid AWS Access Key. Check your credentials.",
+        "SignatureDoesNotMatch" => "Invalid AWS Secret Key. Check your credentials.",
+        "RequestTimeout"        => "The request timed out. Check your network connection.",
+        "ServiceUnavailable"    => "AWS S3 is temporarily unavailable. Try again later.",
+        _                       => $"S3 error ({ex.ErrorCode}): {ex.Message}"
+    };
 
     public void Dispose()
     {
