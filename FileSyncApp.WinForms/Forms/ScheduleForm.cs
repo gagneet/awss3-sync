@@ -185,8 +185,9 @@ public sealed class ScheduleForm : KryptonForm
         if (MessageBox.Show($"Delete schedule '{s.Name}'?", "Confirm", MessageBoxButtons.YesNo,
             MessageBoxIcon.Question) != DialogResult.Yes) return;
 
+        // Delete from config first, then remove from Quartz (if running)
         _configService.DeleteSchedule(s.Id);
-        _scheduler?.RemoveScheduleAsync(s.Id);
+        _ = _scheduler?.RemoveScheduleAsync(s.Id);
         LoadSchedules();
     }
 
@@ -194,10 +195,12 @@ public sealed class ScheduleForm : KryptonForm
     {
         var s = SelectedSchedule(); if (s is null) return;
         s.IsEnabled = !s.IsEnabled;
-        _configService.SaveSchedule(s);
-        _ = s.IsEnabled
-            ? _scheduler?.AddOrUpdateScheduleAsync(s)
-            : _scheduler?.RemoveScheduleAsync(s.Id);
+        // AddOrUpdateScheduleAsync handles both enable (add job) and disable (remove job)
+        // and also persists the change to config; fall back to explicit save if no scheduler.
+        if (_scheduler is not null)
+            _ = _scheduler.AddOrUpdateScheduleAsync(s);
+        else
+            _configService.SaveSchedule(s);
         LoadSchedules();
     }
 

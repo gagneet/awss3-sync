@@ -16,7 +16,10 @@ public interface ISyncSchedulerService
     /// <summary>Add a new schedule or update an existing one (matched by Id).</summary>
     Task AddOrUpdateScheduleAsync(SyncSchedule schedule);
 
-    /// <summary>Remove a schedule by Id, deleting its Quartz job and trigger.</summary>
+    /// <summary>
+    /// Remove a schedule's Quartz job and trigger by Id.
+    /// The caller is responsible for deleting the schedule from config if desired.
+    /// </summary>
     Task RemoveScheduleAsync(string scheduleId);
 
     /// <summary>Return all configured schedules with refreshed NextRun values.</summary>

@@ -52,7 +52,6 @@ static class Program
                 services.AddTransient<MainForm>();
                 services.AddTransient<LoginForm>();
                 services.AddTransient<SettingsForm>();
-                services.AddTransient<ScheduleForm>();
                 services.AddTransient<FileSyncPresenter>();
             })
             .Build();

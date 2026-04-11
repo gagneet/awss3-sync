@@ -76,8 +76,6 @@ public sealed class SyncSchedulerService : ISyncSchedulerService, IAsyncDisposab
 
     public async Task RemoveScheduleAsync(string scheduleId)
     {
-        _configService.DeleteSchedule(scheduleId);
-
         if (_scheduler is null) return;
         var key = JobKey(scheduleId);
         if (await _scheduler.CheckExists(key))
