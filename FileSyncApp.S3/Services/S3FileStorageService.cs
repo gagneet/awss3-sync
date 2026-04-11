@@ -250,11 +250,25 @@ public class S3FileStorageService : IFileStorageService, IDisposable
 
                 if (response.S3Objects != null)
                 {
+                    // Collect all keys in this response to detect folder-marker objects
+                    var allKeysInResponse = new HashSet<string>(
+                        response.S3Objects.Where(o => o?.Key != null).Select(o => o.Key),
+                        StringComparer.OrdinalIgnoreCase);
+
                     foreach (var obj in response.S3Objects)
                     {
                         if (obj == null || obj.Key == prefix || obj.Key.EndsWith("/")) continue;
                         var fileName = Path.GetFileName(obj.Key);
                         if (string.IsNullOrEmpty(fileName)) continue;
+
+                        // Skip S3 folder-placeholder objects: zero-byte objects whose key is also
+                        // a prefix for other objects (e.g. "folder" alongside "folder/file.txt").
+                        if ((obj.Size ?? 0) == 0 &&
+                            allKeysInResponse.Any(k => k.StartsWith(obj.Key + "/", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            _logger.LogDebug("Skipping folder-placeholder object '{Key}'", obj.Key);
+                            continue;
+                        }
 
                         var node = new FileNode(
                             fileName,
@@ -350,8 +364,24 @@ public class S3FileStorageService : IFileStorageService, IDisposable
 
             // localFilePath is already the full destination path — do not re-combine with s3Key
             var fullPath = localFilePath;
+
+            // Guard: destination is an existing local directory (S3 folder-marker object)
+            if (Directory.Exists(fullPath))
+            {
+                _logger.LogWarning("Skipping download of '{Key}': local path is already a directory ({Path})", s3Key, fullPath);
+                return;
+            }
+
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+
+            // Guard: clear read-only flag so we can overwrite previously downloaded files
+            if (File.Exists(fullPath))
+            {
+                var attrs = File.GetAttributes(fullPath);
+                if ((attrs & FileAttributes.ReadOnly) != 0)
+                    File.SetAttributes(fullPath, attrs & ~FileAttributes.ReadOnly);
+            }
 
             var getRequest = new GetObjectRequest
             {
@@ -375,6 +405,16 @@ public class S3FileStorageService : IFileStorageService, IDisposable
             {
                 _logger.LogError(ex, "Download failed for {Key}", s3Key);
                 throw new InvalidOperationException(FriendlyS3Error(ex), ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError(ex, "Access denied writing '{Path}' — the file may be open in another application", fullPath);
+                throw new InvalidOperationException($"Access denied: '{fullPath}' is open in another application or is protected. Close the file and retry.", ex);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogError(ex, "IO error writing '{Path}'", fullPath);
+                throw new InvalidOperationException($"Could not write '{Path.GetFileName(fullPath)}': {ex.Message}", ex);
             }
         }
         finally

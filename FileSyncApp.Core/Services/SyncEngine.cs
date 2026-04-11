@@ -129,6 +129,13 @@ public class SyncEngine : ISyncEngine
             var localPath2 = Path.Combine(localPath, relativePath);
             var snapshotRecord = snapshotDict.GetValueOrDefault(relativePath);
 
+            // Skip if the computed local path is an existing directory (S3 folder-placeholder)
+            if (Directory.Exists(localPath2))
+            {
+                _logger.LogDebug("Skipping remote object '{Remote}': local path is a directory", remotePath);
+                continue;
+            }
+
             if (snapshotRecord == null)
             {
                 // New file on remote - download

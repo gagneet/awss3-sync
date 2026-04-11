@@ -1082,7 +1082,9 @@ public partial class MainForm : KryptonForm, IFileSyncView
                 return;
             }
 
-            int done = 0, total = toDownload.Count;
+            int done = 0, skipped = 0, total = toDownload.Count;
+            var errors = new List<string>();
+
             foreach (var node in toDownload)
             {
                 if (ct.IsCancellationRequested) break;
@@ -1093,16 +1095,39 @@ public partial class MainForm : KryptonForm, IFileSyncView
                     rel = rel[pref.Length..].TrimStart('/');
 
                 var localPath = Path.Combine(dest, rel.Replace('/', Path.DirectorySeparatorChar));
-                Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
+
+                // Skip if local path is already a directory (S3 folder-placeholder object)
+                if (Directory.Exists(localPath)) { skipped++; continue; }
+
+                var parentDir = Path.GetDirectoryName(localPath);
+                if (!string.IsNullOrEmpty(parentDir)) Directory.CreateDirectory(parentDir);
 
                 SafeSetStatus($"Downloading  {rel}  ({done + 1}/{total})");
                 var prog = new Progress<double>(pct => SafeSetProgress((int)pct));
-                await _s3Service.DownloadFileAsync(node.Path, localPath, prog, ct);
-                done++;
-                SafeSetProgress(done * 100 / total);
+
+                try
+                {
+                    await _s3Service.DownloadFileAsync(node.Path, localPath, prog, ct);
+                    done++;
+                    SafeSetProgress(done * 100 / total);
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    errors.Add($"{rel}: {ex.Message}");
+                }
             }
 
-            StatusMessage = $"Downloaded {done}/{total} file(s) — skipped {nodes.Count - done} unchanged";
+            var summary = $"Downloaded {done}/{total} file(s)";
+            if (skipped > 0) summary += $" — {skipped} skipped";
+            StatusMessage = summary;
+            if (errors.Any())
+            {
+                var msg = string.Join("\n", errors.Take(10));
+                if (errors.Count > 10) msg += $"\n… and {errors.Count - 10} more";
+                MessageBox.Show(msg, "Some files could not be downloaded", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             if (!string.IsNullOrEmpty(_localCurrentPath)) LoadLocalFolder(_localCurrentPath);
         }
         catch (OperationCanceledException) { StatusMessage = "Download cancelled"; }
