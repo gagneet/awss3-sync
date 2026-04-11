@@ -19,12 +19,13 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private readonly ISyncEngine _syncEngine;
 
     // ── Toolbar buttons ───────────────────────────────────────────────────
-    private KryptonButton _btnSync     = null!;
-    private KryptonButton _btnUpload   = null!;
-    private KryptonButton _btnDownload = null!;
-    private KryptonButton _btnRefresh  = null!;
-    private KryptonButton _btnSettings = null!;
-    private Button        _btnCancel   = null!;
+    private KryptonButton _btnSync      = null!;
+    private KryptonButton _btnUpload    = null!;
+    private KryptonButton _btnDownload  = null!;
+    private KryptonButton _btnNewFolder = null!;
+    private KryptonButton _btnRefresh   = null!;
+    private KryptonButton _btnSettings  = null!;
+    private Button        _btnCancel    = null!;
 
     // ── Local pane ────────────────────────────────────────────────────────
     private KryptonTextBox _txtLocalPath      = null!;
@@ -32,6 +33,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private KryptonButton  _btnLocalUp        = null!;
     private KryptonButton  _btnLocalSelectAll = null!;
     private ListView       _localListView     = null!;
+    private TextBox        _txtLocalFilter    = null!;
 
     // ── S3 pane ───────────────────────────────────────────────────────────
     private KryptonTextBox _txtS3Prefix      = null!;
@@ -39,13 +41,18 @@ public partial class MainForm : KryptonForm, IFileSyncView
     private KryptonButton  _btnS3Refresh     = null!;
     private KryptonButton  _btnS3SelectAll   = null!;
     private ListView       _s3ListView       = null!;
+    private TextBox        _txtS3Filter      = null!;
 
-    // ── Status bar ────────────────────────────────────────────────────────
+    // ── Status bar────────────────────────────────────────────────────────
     private KryptonLabel       _statusLabel = null!;
     private KryptonProgressBar _progressBar = null!;
 
     // ── Layout ────────────────────────────────────────────────────────────
     private SplitContainer _split = null!;
+
+    // ── Column sorters ────────────────────────────────────────────────────
+    private readonly ListViewColumnSorter _localSorter = new();
+    private readonly ListViewColumnSorter _s3Sorter    = new();
 
     // ── State ─────────────────────────────────────────────────────────────
     private string                   _localCurrentPath  = string.Empty;
@@ -98,11 +105,12 @@ public partial class MainForm : KryptonForm, IFileSyncView
             BackColor = Color.FromArgb(45, 45, 48)
         };
 
-        _btnSync     = ToolBtn("⇄  Sync Now",       Color.FromArgb(0, 122, 204));
-        _btnUpload   = ToolBtn("⬆  Upload →",       Color.FromArgb(30, 120, 0));
-        _btnDownload = ToolBtn("← ⬇  Download",    Color.FromArgb(0, 100, 170));
-        _btnRefresh  = ToolBtn("↺  Refresh",        Color.FromArgb(70, 70, 80));
-        _btnSettings = ToolBtn("⚙  Settings",       Color.FromArgb(70, 70, 80));
+        _btnSync      = ToolBtn("⇄  Sync Now",      Color.FromArgb(0, 122, 204));
+        _btnUpload    = ToolBtn("⬆  Upload →",      Color.FromArgb(30, 120, 0));
+        _btnDownload  = ToolBtn("← ⬇  Download",   Color.FromArgb(0, 100, 170));
+        _btnNewFolder = ToolBtn("📁  New Folder",    Color.FromArgb(60, 60, 90));
+        _btnRefresh   = ToolBtn("↺  Refresh",       Color.FromArgb(70, 70, 80));
+        _btnSettings  = ToolBtn("⚙  Settings",      Color.FromArgb(70, 70, 80));
 
         _btnCancel = new Button
         {
@@ -120,13 +128,13 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _btnDownload.Enabled = false;
 
         int bx = 10;
-        foreach (Control btn in new Control[] { _btnSync, _btnUpload, _btnDownload, _btnRefresh, _btnSettings, _btnCancel })
+        foreach (Control btn in new Control[] { _btnSync, _btnUpload, _btnDownload, _btnNewFolder, _btnRefresh, _btnSettings, _btnCancel })
         {
             btn.Location = new Point(bx, 9);
             btn.Size     = new Size(110, 38);
             bx += 116;
         }
-        toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnRefresh, _btnSettings, _btnCancel });
+        toolbar.Controls.AddRange(new Control[] { _btnSync, _btnUpload, _btnDownload, _btnNewFolder, _btnRefresh, _btnSettings, _btnCancel });
 
         // ── Split container ─────────────────────────────────────────────
         // Keep min sizes small so the [Panel1MinSize, Width-Panel2MinSize]
@@ -244,7 +252,24 @@ public partial class MainForm : KryptonForm, IFileSyncView
             new ColumnHeader { Text = "Type",     Width = 70 }
         });
 
+        _localListView.ListViewItemSorter = _localSorter;
+
+        var localFilterBar = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 32,
+            BackColor = Color.FromArgb(40, 40, 40)
+        };
+        _txtLocalFilter = new TextBox
+        {
+            Location        = new Point(6, 4),
+            Size            = new Size(300, 24),
+            PlaceholderText = "🔍  Filter files… (Ctrl+F)"
+        };
+        localFilterBar.Controls.Add(_txtLocalFilter);
+
         pane.Controls.Add(_localListView);
+        pane.Controls.Add(localFilterBar);
         pane.Controls.Add(header);
         return pane;
     }
@@ -320,7 +345,24 @@ public partial class MainForm : KryptonForm, IFileSyncView
             new ColumnHeader { Text = "Key",      Width = 200 }
         });
 
+        _s3ListView.ListViewItemSorter = _s3Sorter;
+
+        var s3FilterBar = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 32,
+            BackColor = Color.FromArgb(20, 30, 50)
+        };
+        _txtS3Filter = new TextBox
+        {
+            Location        = new Point(6, 4),
+            Size            = new Size(300, 24),
+            PlaceholderText = "🔍  Filter files… (Ctrl+F)"
+        };
+        s3FilterBar.Controls.Add(_txtS3Filter);
+
         pane.Controls.Add(_s3ListView);
+        pane.Controls.Add(s3FilterBar);
         pane.Controls.Add(header);
         return pane;
     }
@@ -341,6 +383,8 @@ public partial class MainForm : KryptonForm, IFileSyncView
         var localCtx = new ContextMenuStrip();
         localCtx.Items.AddRange(new ToolStripItem[]
         {
+            new ToolStripMenuItem("Rename",             null, OnRenameLocal),
+            new ToolStripSeparator(),
             new ToolStripMenuItem("Upload to S3",       null, OnUploadSelected),
             new ToolStripMenuItem("Open in Explorer",   null, OnOpenInExplorer),
             new ToolStripSeparator(),
@@ -353,6 +397,8 @@ public partial class MainForm : KryptonForm, IFileSyncView
         var s3Ctx = new ContextMenuStrip();
         s3Ctx.Items.AddRange(new ToolStripItem[]
         {
+            new ToolStripMenuItem("Rename",             null, (s, e) => MessageBox.Show("S3 rename not yet supported.", "Not Supported", MessageBoxButtons.OK, MessageBoxIcon.Information)) { Enabled = true },
+            new ToolStripSeparator(),
             new ToolStripMenuItem("Download",           null, OnDownloadSelected),
             new ToolStripMenuItem("Download as ZIP",    null, OnDownloadAsZip),
             new ToolStripMenuItem("Download Folder",    null, OnDownloadFolder),
@@ -388,11 +434,69 @@ public partial class MainForm : KryptonForm, IFileSyncView
         _s3ListView.ItemChecked    += OnS3ItemChecked;
         _s3ListView.DoubleClick    += S3List_DoubleClick;
 
-        // Drag local items onto S3 pane
-        _localListView.ItemDrag += (s, e) => _localListView.DoDragDrop(e.Item!, DragDropEffects.Copy);
+        _btnNewFolder.Click += OnNewFolder;
+
+        _txtLocalFilter.TextChanged += (s, e) => ApplyLocalFilter();
+        _txtS3Filter.TextChanged    += (s, e) => ApplyS3Filter();
+
+        _localListView.ColumnClick += (s, e) => SortListView(_localListView, _localSorter, e.Column);
+        _s3ListView.ColumnClick    += (s, e) => SortListView(_s3ListView,    _s3Sorter,    e.Column);
+
+        // Drag local items onto S3 pane + Explorer drag-drop
+        _localListView.ItemDrag  += (s, e) => _localListView.DoDragDrop(e.Item!, DragDropEffects.Copy);
+        _localListView.AllowDrop  = true;
+        _localListView.DragEnter += (s, e) =>
+        {
+            if (e.Data!.GetDataPresent(DataFormats.FileDrop))
+                e.Effect = DragDropEffects.Copy;
+        };
+        _localListView.DragDrop  += (s, e) =>
+        {
+            if (e.Data!.GetData(DataFormats.FileDrop) is string[] paths && !string.IsNullOrEmpty(_localCurrentPath))
+            {
+                foreach (var src in paths)
+                {
+                    var dst = Path.Combine(_localCurrentPath, Path.GetFileName(src)!);
+                    try
+                    {
+                        if (File.Exists(src))           File.Copy(src, dst, overwrite: true);
+                        else if (Directory.Exists(src)) CopyDirectory(src, dst);
+                    }
+                    catch (Exception ex) { SafeSetStatus($"Copy error: {ex.Message}"); }
+                }
+                LoadLocalFolder(_localCurrentPath);
+            }
+        };
         _s3ListView.AllowDrop    = true;
-        _s3ListView.DragEnter   += (s, e) => { if (e.Data!.GetDataPresent(typeof(ListViewItem))) e.Effect = DragDropEffects.Copy; };
-        _s3ListView.DragDrop    += (s, e) => OnUploadSelected(s, EventArgs.Empty);
+        _s3ListView.DragEnter   += (s, e) =>
+        {
+            if (e.Data!.GetDataPresent(DataFormats.FileDrop) || e.Data!.GetDataPresent(typeof(ListViewItem)))
+                e.Effect = DragDropEffects.Copy;
+        };
+        _s3ListView.DragDrop    += (s, e) =>
+        {
+            if (e.Data!.GetData(DataFormats.FileDrop) is string[] paths)
+            {
+                var uploadItems = new List<(FileInfo File, string RelativePath)>();
+                foreach (var p in paths)
+                {
+                    if (File.Exists(p))
+                        uploadItems.Add((new FileInfo(p), Path.GetFileName(p)!));
+                    else if (Directory.Exists(p))
+                    {
+                        var di = new DirectoryInfo(p);
+                        foreach (var f in di.EnumerateFiles("*", SearchOption.AllDirectories))
+                            uploadItems.Add((f, Path.GetRelativePath(di.Parent!.FullName, f.FullName).Replace('\\', '/')));
+                    }
+                }
+                if (uploadItems.Count > 0)
+                    _ = UploadItemsDirectAsync(uploadItems);
+            }
+            else
+            {
+                OnUploadSelected(s, EventArgs.Empty);
+            }
+        };
 
         _syncEngine.ConflictsDetected += OnConflictsDetected;
     }
@@ -439,6 +543,32 @@ public partial class MainForm : KryptonForm, IFileSyncView
                 ToggleSelectAll(_s3ListView);
                 return true;
             }
+        }
+        if (keyData == Keys.F5)
+        {
+            _ = Task.Run(async () => {
+                LoadLocalFolder(_localCurrentPath);
+                await LoadS3ListAsync(_s3CurrentPrefix);
+            });
+            return true;
+        }
+        if (keyData == (Keys.Control | Keys.F))
+        {
+            if (_localListView.Focused || _split.Panel1.ContainsFocus)
+                _txtLocalFilter.Focus();
+            else
+                _txtS3Filter.Focus();
+            return true;
+        }
+        if (keyData == (Keys.Control | Keys.U))
+        {
+            if (_btnUpload.Enabled) OnUploadSelected(null, EventArgs.Empty);
+            return true;
+        }
+        if (keyData == (Keys.Control | Keys.D))
+        {
+            if (_btnDownload.Enabled) OnDownloadSelected(null, EventArgs.Empty);
+            return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);
     }
@@ -541,7 +671,12 @@ public partial class MainForm : KryptonForm, IFileSyncView
         }
 
         _localListView.EndUpdate();
-        StatusMessage = $"Local: {path}";
+        var localFiles = _localListView.Items.Cast<ListViewItem>()
+            .Where(i => i.Tag is FileInfo).ToList();
+        var localDirs = _localListView.Items.Cast<ListViewItem>()
+            .Count(i => i.Tag is DirectoryInfo);
+        var localSize = localFiles.Sum(i => ((FileInfo)i.Tag!).Length);
+        StatusMessage = $"Local: {localDirs} folder(s), {localFiles.Count} file(s)  •  {FormatSize(localSize)} total";
     }
 
     private void NavigateLocalUp()
@@ -616,9 +751,10 @@ public partial class MainForm : KryptonForm, IFileSyncView
 
             _s3ListView.EndUpdate();
 
-            var files   = items.Count(n => !n.IsDirectory);
-            var folders = items.Count(n => n.IsDirectory);
-            StatusMessage = $"S3:  {folders} folder(s),  {files} file(s)";
+            var files     = items.Count(n => !n.IsDirectory);
+            var folders   = items.Count(n => n.IsDirectory);
+            var totalSize = items.Where(n => !n.IsDirectory).Sum(n => n.Size);
+            StatusMessage = $"S3: {folders} folder(s), {files} file(s)  •  {FormatSize(totalSize)} total";
         }
         catch (Exception ex)
         {
@@ -730,6 +866,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
             _btnSync.Enabled   = true;
             _btnCancel.Visible = false;
             ProgressVisible    = false;
+            _currentOperationCts?.Dispose();
             _currentOperationCts = null;
         }
     }
@@ -788,17 +925,19 @@ public partial class MainForm : KryptonForm, IFileSyncView
             var user = _authService.GetCurrentUser();
             if (user == null) return;
 
-            foreach (var (file, relPath) in toUpload)
+            var tasks = toUpload.Select(async item =>
             {
-                if (ct.IsCancellationRequested) break;
+                if (ct.IsCancellationRequested) return;
+                var (file, relPath) = item;
                 var key = (_s3CurrentPrefix.TrimEnd('/') + "/" + relPath).TrimStart('/');
-                SafeSetStatus($"Uploading  {relPath}  ({done + 1}/{total})");
+                SafeSetStatus($"Uploading  {relPath}  ({Interlocked.Increment(ref done)}/{total})");
                 var prog = new Progress<double>(pct => SafeSetProgress((int)pct));
                 await _s3Service.UploadFileAsync(file.FullName, key,
                     new List<UserRole> { user.Role }, prog, ct);
-                done++;
                 SafeSetProgress(done * 100 / total);
-            }
+            }).ToList();
+
+            await Task.WhenAll(tasks);
 
             StatusMessage = $"Uploaded {done}/{total} file(s) — skipped {items.Count - done} unchanged";
             await LoadS3ListAsync(_s3CurrentPrefix);
@@ -809,6 +948,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
         {
             _btnCancel.Visible   = false;
             ProgressVisible      = false;
+            _currentOperationCts?.Dispose();
             _currentOperationCts = null;
             UpdateToolbarButtons();
         }
@@ -954,6 +1094,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
         {
             _btnCancel.Visible   = false;
             ProgressVisible      = false;
+            _currentOperationCts?.Dispose();
             _currentOperationCts = null;
             UpdateToolbarButtons();
         }
@@ -982,13 +1123,18 @@ public partial class MainForm : KryptonForm, IFileSyncView
         return result;
     }
 
-    // Returns only those S3 nodes whose local counterpart is absent or different.
-    private static List<FileNode> FilterChangedDownloads(List<FileNode> nodes, string destFolder)
+    private List<FileNode> FilterChangedDownloads(List<FileNode> nodes, string destFolder)
     {
         var changed = new List<FileNode>();
+        var pref    = _s3CurrentPrefix.TrimStart('/');
         foreach (var node in nodes)
         {
-            var localPath = Path.Combine(destFolder, Path.GetFileName(node.Name));
+            // Compute relative path the same way the download loop does (strip current prefix)
+            var rel = node.Path.TrimStart('/');
+            if (rel.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                rel = rel[pref.Length..].TrimStart('/');
+            var localPath = Path.Combine(destFolder, rel.Replace('/', Path.DirectorySeparatorChar));
+
             if (!File.Exists(localPath))
             {
                 changed.Add(node);
@@ -1024,7 +1170,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
             StatusMessage = $"ZIP saved: {dlg.FileName}";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { ProgressVisible = false; _currentOperationCts = null; }
+        finally { ProgressVisible = false; _currentOperationCts?.Dispose(); _currentOperationCts = null; }
     }
 
     private async void OnDownloadFolder(object? sender, EventArgs e)
@@ -1048,7 +1194,7 @@ public partial class MainForm : KryptonForm, IFileSyncView
             if (!string.IsNullOrEmpty(_localCurrentPath)) LoadLocalFolder(_localCurrentPath);
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { ProgressVisible = false; _currentOperationCts = null; }
+        finally { ProgressVisible = false; _currentOperationCts?.Dispose(); _currentOperationCts = null; }
     }
 
     private async Task DownloadFileAsync(string s3Key, string localPath)
@@ -1158,10 +1304,11 @@ public partial class MainForm : KryptonForm, IFileSyncView
     // ══════════════════════════════════════════════════════════════════════
     #region Utility
 
-    private void ShowSettingsDialog() =>
-        MessageBox.Show(
-            "Configure sync options, bandwidth throttling, and file exclusions.",
-            "Settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    private void ShowSettingsDialog()
+    {
+        using var dlg = new SettingsForm(_configService);
+        dlg.ShowDialog(this);
+    }
 
     private void CancelCurrentOperation()
     {
@@ -1202,6 +1349,200 @@ public partial class MainForm : KryptonForm, IFileSyncView
     {
         if (InvokeRequired) Invoke(() => _progressBar.Visible = visible);
         else _progressBar.Visible = visible;
+    }
+
+    #endregion
+
+    // ══════════════════════════════════════════════════════════════════════
+    #region Filter / Sort helpers
+
+    private void ApplyLocalFilter()
+    {
+        var term = _txtLocalFilter.Text.Trim().ToLowerInvariant();
+        _localListView.BeginUpdate();
+        foreach (ListViewItem item in _localListView.Items)
+        {
+            if (item.Tag == null) { item.BackColor = Color.Empty; continue; }
+            var name = item.Tag switch
+            {
+                FileInfo f      => f.Name.ToLowerInvariant(),
+                DirectoryInfo d => d.Name.ToLowerInvariant(),
+                _               => item.Text.ToLowerInvariant()
+            };
+            item.BackColor = string.IsNullOrEmpty(term) || name.Contains(term)
+                ? Color.Empty
+                : Color.FromArgb(60, 0, 0);
+        }
+        _localListView.EndUpdate();
+    }
+
+    private void ApplyS3Filter()
+    {
+        var term = _txtS3Filter.Text.Trim().ToLowerInvariant();
+        _s3ListView.BeginUpdate();
+        foreach (ListViewItem item in _s3ListView.Items)
+        {
+            if (item.Tag == null || item.Tag is string) { item.BackColor = Color.Empty; continue; }
+            var name = item.Tag is FileNode n ? n.Name.ToLowerInvariant() : item.Text.ToLowerInvariant();
+            item.BackColor = string.IsNullOrEmpty(term) || name.Contains(term)
+                ? Color.Empty
+                : Color.FromArgb(0, 40, 60);
+        }
+        _s3ListView.EndUpdate();
+    }
+
+    private static void SortListView(ListView lv, ListViewColumnSorter sorter, int col)
+    {
+        if (sorter.SortColumn == col)
+            sorter.Order = sorter.Order == SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending;
+        else
+        {
+            sorter.SortColumn = col;
+            sorter.Order = SortOrder.Ascending;
+        }
+        lv.Sort();
+    }
+
+    #endregion
+
+    // ══════════════════════════════════════════════════════════════════════
+    #region New folder / Rename
+
+    private static string? ShowInputDialog(string prompt, string title, string defaultValue = "")
+    {
+        using var form = new Form
+        {
+            Text = title, Width = 380, Height = 130,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false, MinimizeBox = false
+        };
+        var lbl = new Label { Text = prompt, Left = 10, Top = 15, Width = 340 };
+        var txt = new TextBox { Left = 10, Top = 38, Width = 340, Text = defaultValue };
+        var ok  = new Button { Text = "OK",     Left = 200, Top = 68, Width = 75, DialogResult = DialogResult.OK };
+        var cn  = new Button { Text = "Cancel", Left = 285, Top = 68, Width = 75, DialogResult = DialogResult.Cancel };
+        form.Controls.AddRange(new Control[] { lbl, txt, ok, cn });
+        form.AcceptButton = ok;
+        form.CancelButton = cn;
+        return form.ShowDialog() == DialogResult.OK ? txt.Text.Trim() : null;
+    }
+
+    private void OnNewFolder(object? sender, EventArgs e)
+    {
+        var name = ShowInputDialog("New folder name:", "New Folder", "NewFolder");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        name = name.Trim();
+
+        if (!string.IsNullOrEmpty(_localCurrentPath))
+        {
+            try
+            {
+                var newPath = Path.Combine(_localCurrentPath, name);
+                Directory.CreateDirectory(newPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not create local folder: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            LoadLocalFolder(_localCurrentPath);
+        }
+
+        _ = CreateS3FolderAsync(name);
+    }
+
+    private async Task CreateS3FolderAsync(string name)
+    {
+        try
+        {
+            var key = (_s3CurrentPrefix.TrimEnd('/') + "/" + name.Trim('/') + "/").TrimStart('/');
+            var tmpFile = Path.GetTempFileName();
+            try
+            {
+                var user = _authService.GetCurrentUser();
+                await _s3Service.UploadFileAsync(tmpFile, key,
+                    new List<UserRole> { user?.Role ?? UserRole.User },
+                    null, CancellationToken.None);
+            }
+            finally { File.Delete(tmpFile); }
+            await LoadS3ListAsync(_s3CurrentPrefix);
+            SafeSetStatus($"Created S3 folder: {name}");
+        }
+        catch (Exception ex)
+        {
+            SafeSetStatus($"Could not create S3 folder: {ex.Message}");
+        }
+    }
+
+    private void OnRenameLocal(object? sender, EventArgs e)
+    {
+        if (_localListView.SelectedItems.Count == 0) return;
+        var item = _localListView.SelectedItems[0];
+        if (item.Tag is not FileInfo fi) return;
+
+        var newName = ShowInputDialog("New name:", "Rename", fi.Name);
+        if (string.IsNullOrWhiteSpace(newName) || newName == fi.Name) return;
+        try
+        {
+            var dest = Path.Combine(fi.DirectoryName!, newName.Trim());
+            File.Move(fi.FullName, dest);
+            LoadLocalFolder(_localCurrentPath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Rename Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    #endregion
+
+    // ══════════════════════════════════════════════════════════════════════
+    #region Drag-drop helpers
+
+    private static void CopyDirectory(string src, string dest)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(src))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
+        foreach (var sub in Directory.GetDirectories(src))
+            CopyDirectory(sub, Path.Combine(dest, Path.GetFileName(sub)));
+    }
+
+    private async Task UploadItemsDirectAsync(List<(FileInfo File, string RelativePath)> items)
+    {
+        var user = _authService.GetCurrentUser();
+        if (user == null) return;
+
+        _currentOperationCts = new CancellationTokenSource();
+        var ct = _currentOperationCts.Token;
+        int done = 0, total = items.Count;
+
+        try
+        {
+            _btnCancel.Visible = true;
+            ProgressVisible    = true;
+            foreach (var (file, relPath) in items)
+            {
+                if (ct.IsCancellationRequested) break;
+                var key = (_s3CurrentPrefix.TrimEnd('/') + "/" + relPath).TrimStart('/');
+                SafeSetStatus($"Uploading {relPath} ({++done}/{total})");
+                await _s3Service.UploadFileAsync(file.FullName, key,
+                    new List<UserRole> { user.Role }, null, ct);
+                SafeSetProgress(done * 100 / total);
+            }
+            StatusMessage = $"Uploaded {done}/{total} file(s)";
+            await LoadS3ListAsync(_s3CurrentPrefix);
+        }
+        catch (OperationCanceledException) { StatusMessage = "Upload cancelled"; }
+        catch (Exception ex) { SafeSetStatus($"Upload error: {ex.Message}"); }
+        finally
+        {
+            _btnCancel.Visible = false;
+            ProgressVisible    = false;
+            _currentOperationCts?.Dispose();
+            _currentOperationCts = null;
+            UpdateToolbarButtons();
+        }
     }
 
     #endregion
@@ -1307,5 +1648,55 @@ public class ConflictResolutionDialog : Form
         public string       RemoteModified { get; set; } = "";
         public string       Resolution     { get; set; } = "";
         public ConflictInfo Conflict       { get; set; } = null!;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+/// <summary>Handles click-to-sort on a ListView column.</summary>
+internal sealed class ListViewColumnSorter : System.Collections.IComparer
+{
+    public int       SortColumn { get; set; }
+    public SortOrder Order      { get; set; } = SortOrder.None;
+
+    public int Compare(object? x, object? y)
+    {
+        if (x is not ListViewItem lx || y is not ListViewItem ly) return 0;
+        var tx = lx.SubItems.Count > SortColumn ? lx.SubItems[SortColumn].Text : "";
+        var ty = ly.SubItems.Count > SortColumn ? ly.SubItems[SortColumn].Text : "";
+
+        if (tx == "..") return -1;
+        if (ty == "..") return  1;
+
+        int result;
+        if (SortColumn == 1)
+        {
+            result = ParseSize(tx).CompareTo(ParseSize(ty));
+        }
+        else if (SortColumn == 2)
+        {
+            result = DateTime.TryParse(tx, out var dx) && DateTime.TryParse(ty, out var dy)
+                ? dx.CompareTo(dy)
+                : string.Compare(tx, ty, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            result = string.Compare(tx, ty, StringComparison.OrdinalIgnoreCase);
+        }
+        return Order == SortOrder.Descending ? -result : result;
+    }
+
+    private static long ParseSize(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s) || s == "—") return 0;
+        var parts = s.Trim().Split(' ');
+        if (parts.Length < 2 || !double.TryParse(parts[0], System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var v)) return 0;
+        return parts[1].ToUpperInvariant() switch
+        {
+            "KB" => (long)(v * 1024),
+            "MB" => (long)(v * 1024 * 1024),
+            "GB" => (long)(v * 1024 * 1024 * 1024),
+            _    => (long)v
+        };
     }
 }
