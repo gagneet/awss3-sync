@@ -50,6 +50,7 @@ static class Program
 
                 services.AddTransient<MainForm>();
                 services.AddTransient<LoginForm>();
+                services.AddTransient<SettingsForm>();
                 services.AddTransient<FileSyncPresenter>();
             })
             .Build();
@@ -59,6 +60,19 @@ static class Program
 
         try
         {
+            var configService = sp.GetRequiredService<IConfigurationService>();
+            var config        = configService.GetConfiguration();
+            if (string.IsNullOrWhiteSpace(config.AWS.BucketName))
+            {
+                MessageBox.Show(
+                    "AWS BucketName is not configured.\n\n" +
+                    "Please edit appsettings.json (or open Settings after login) and set:\n" +
+                    "  AWS.AccessKey, AWS.SecretKey, AWS.Region, AWS.BucketName",
+                    "Configuration Warning",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
             var loginForm = sp.GetRequiredService<LoginForm>();
             if (loginForm.ShowDialog() == DialogResult.OK)
             {
