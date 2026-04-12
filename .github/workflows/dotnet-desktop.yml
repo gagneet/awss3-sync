@@ -115,7 +115,7 @@ jobs:
           path: FileSyncApp-${{ steps.version.outputs.VERSION }}-win-x64.zip
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: AWS S3 File Sync v${{ steps.version.outputs.VERSION }}
           draft: false
