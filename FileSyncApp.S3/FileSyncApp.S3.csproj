@@ -6,9 +6,9 @@
 
   <ItemGroup>
     <PackageReference Include="Amazon.Extensions.CognitoAuthentication" Version="3.1.4" />
-    <PackageReference Include="AWSSDK.CognitoIdentity" Version="4.0.2.26" />
-    <PackageReference Include="AWSSDK.CognitoIdentityProvider" Version="4.0.6.10" />
-    <PackageReference Include="AWSSDK.S3" Version="4.0.21.1" />
+    <PackageReference Include="AWSSDK.CognitoIdentity" Version="4.0.2.32" />
+    <PackageReference Include="AWSSDK.CognitoIdentityProvider" Version="4.0.8.6" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.23.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
